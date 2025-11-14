@@ -26,6 +26,14 @@ interface ShortcutsStore extends ShortcutsState {
   resetShortcuts: () => void
 }
 
+type PersistedShortcutsState = {
+  shortcuts?: Record<string, Shortcut>
+}
+
+function isPersistedShortcutsState(value: unknown): value is PersistedShortcutsState {
+  return typeof value === 'object' && value !== null && 'shortcuts' in value
+}
+
 const defaultShortcuts: Record<string, Omit<Shortcut, 'defaultKey'>> = {
   hideOrShowMainWindow: {
     action: 'hideOrShowMainWindow',
@@ -101,8 +109,8 @@ export const useShortcutsStore = create<ShortcutsStore>()(
     {
       name: 'interview-coder-shortcuts',
       version: 2,
-      migrate: (state: any) => {
-        if (!state?.shortcuts) return state
+      migrate: (state: unknown) => {
+        if (!isPersistedShortcutsState(state) || !state.shortcuts) return state as ShortcutsStore
         // Merge in any new default shortcuts that are missing
         const defaults = Object.fromEntries(
           Object.entries(defaultShortcuts).map(([action, shortcut]) => [
@@ -116,7 +124,7 @@ export const useShortcutsStore = create<ShortcutsStore>()(
             ...defaults,
             ...state.shortcuts
           }
-        }
+        } as ShortcutsStore
       }
     }
   )

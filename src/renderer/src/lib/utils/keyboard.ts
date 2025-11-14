@@ -100,8 +100,14 @@ export function getShortcutAccelerator(event: KeyboardEvent) {
   }
 
   const modifiers: string[] = []
-  if (event.ctrlKey) modifiers.push(isMac ? 'Control' : 'CommandOrControl')
-  if (event.altKey) modifiers.push('Alt')
+  // AltRight on Windows reports AltGraph and toggles ctrlKey, so treat it as plain Alt
+  const isAltGraph =
+    typeof event.getModifierState === 'function' && event.getModifierState('AltGraph')
+  const isCtrlActive = event.ctrlKey && !isAltGraph
+  const isAltActive = event.altKey || isAltGraph
+
+  if (isCtrlActive) modifiers.push(isMac ? 'Control' : 'CommandOrControl')
+  if (isAltActive) modifiers.push('Alt')
   if (event.shiftKey) modifiers.push('Shift')
   if (event.metaKey) modifiers.push(isMac ? 'CommandOrControl' : 'Meta')
   if (modifiers.length === 0) return null

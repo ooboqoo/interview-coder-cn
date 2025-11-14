@@ -2,13 +2,20 @@ import 'dotenv/config'
 import { app, BrowserWindow, globalShortcut, dialog } from 'electron'
 import { autoUpdater } from 'electron-updater'
 
+type AbortLikeError = {
+  name?: string
+  code?: string
+  message?: unknown
+}
+
 // Swallow AbortError from user-initiated stream cancellations to keep console clean
 function isAbortError(error: unknown): boolean {
-  const err = error as any
-  return (
-    !!err &&
-    (err.name === 'AbortError' || err.code === 'ABORT_ERR' || /aborted/i.test(String(err.message)))
-  )
+  if (typeof error !== 'object' || error === null) {
+    return false
+  }
+  const err = error as AbortLikeError
+  const message = typeof err.message === 'string' ? err.message : ''
+  return err.name === 'AbortError' || err.code === 'ABORT_ERR' || /aborted/i.test(message)
 }
 
 process.on('unhandledRejection', (error) => {

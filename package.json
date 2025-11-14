@@ -1,6 +1,6 @@
 {
   "name": "interview-coder-cn",
-  "version": "1.4.0",
+  "version": "1.4.2",
   "description": "编码面试解题助手，实时截屏并生成解题思路和答案",
   "main": "./out/main/index.js",
   "scripts": {

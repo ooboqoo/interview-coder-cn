@@ -32,7 +32,7 @@ export default function CoderPage() {
     return () => {
       window.api.removeSyncAppStateListener()
     }
-  }, [])
+  }, [syncAppState])
 
   return (
     <>

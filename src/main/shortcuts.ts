@@ -1,4 +1,5 @@
 import { globalShortcut, ipcMain } from 'electron'
+import type { BrowserWindow } from 'electron'
 import type { ModelMessage } from 'ai'
 import { takeScreenshot } from './take-screenshot'
 import { getSolutionStream, getFollowUpStream } from './ai'
@@ -9,6 +10,7 @@ type Shortcut = {
   action: string
   key: string
   status: ShortcutStatus
+  registeredKeys: string[]
 }
 
 enum ShortcutStatus {
@@ -33,6 +35,44 @@ let currentStreamContext: StreamContext | null = null
 // Conversation history tracking
 let conversationMessages: ModelMessage[] = []
 
+const FRONT_REASSERT_DURATION = 5000
+const FRONT_REASSERT_INTERVAL = 150
+const FRONT_RELATIVE_LEVEL = 10
+let frontReassertTimer: NodeJS.Timeout | null = null
+
+function applyTopMost(win: BrowserWindow) {
+  if (!win || win.isDestroyed()) return
+  win.setAlwaysOnTop(true, 'screen-saver', FRONT_RELATIVE_LEVEL)
+  win.moveTop()
+}
+
+function keepWindowInFront(window: BrowserWindow) {
+  if (!window || window.isDestroyed()) return
+  if (frontReassertTimer) {
+    clearInterval(frontReassertTimer)
+    frontReassertTimer = null
+  }
+
+  const start = Date.now()
+  const reassert = () => {
+    if (!window.isVisible() || window.isDestroyed()) return false
+    applyTopMost(window)
+    return true
+  }
+
+  if (!reassert()) return
+
+  frontReassertTimer = setInterval(() => {
+    const shouldStop = Date.now() - start > FRONT_REASSERT_DURATION
+    if (shouldStop || !reassert()) {
+      if (frontReassertTimer) {
+        clearInterval(frontReassertTimer)
+        frontReassertTimer = null
+      }
+    }
+  }, FRONT_REASSERT_INTERVAL)
+}
+
 function abortCurrentStream(reason: AbortReason) {
   if (!currentStreamContext) return
   currentStreamContext.reason = reason
@@ -46,7 +86,13 @@ const callbacks: Record<string, () => void> = {
     if (mainWindow.isVisible()) {
       mainWindow.hide()
     } else {
-      mainWindow.show()
+      // 重新显示时不断重申置顶属性，抵消其他前台软件持续抢占
+      if (process.platform === 'darwin' || process.platform === 'win32') {
+        mainWindow.showInactive()
+      } else {
+        mainWindow.show()
+      }
+      keepWindowInFront(mainWindow)
     }
   },
 
@@ -194,16 +240,60 @@ const callbacks: Record<string, () => void> = {
   }
 }
 
-function registerShortcut(action: string, key: string) {
-  if (shortcuts[action]?.status === ShortcutStatus.Registered) {
-    globalShortcut.unregister(shortcuts[action].key)
-    shortcuts[action].status = ShortcutStatus.Available
+function unregisterShortcut(action: string) {
+  const shortcut = shortcuts[action]
+  if (!shortcut) return
+  if (shortcut.registeredKeys.length) {
+    shortcut.registeredKeys.forEach((registeredKey) => {
+      globalShortcut.unregister(registeredKey)
+    })
+  } else {
+    globalShortcut.unregister(shortcut.key)
   }
-  const ok = globalShortcut.register(key, callbacks[action])
+  shortcut.status = ShortcutStatus.Available
+  shortcut.registeredKeys = []
+}
+
+function getShortcutRegistrationKeys(key: string) {
+  const keys = [key]
+  if (process.platform !== 'win32') {
+    return keys
+  }
+  const parts = key.split('+')
+  const hasAlt = parts.includes('Alt')
+  const hasCtrl = parts.includes('CommandOrControl') || parts.includes('Control')
+  if (hasAlt && !hasCtrl) {
+    const aliasParts = [...parts]
+    const altIndex = aliasParts.indexOf('Alt')
+    if (altIndex >= 0) {
+      aliasParts.splice(altIndex, 0, 'CommandOrControl')
+      const aliasKey = aliasParts.join('+')
+      if (!keys.includes(aliasKey)) {
+        keys.push(aliasKey)
+      }
+    }
+  }
+  return keys
+}
+
+function registerShortcut(action: string, key: string) {
+  if (shortcuts[action]) {
+    unregisterShortcut(action)
+  }
+
+  const keysToRegister = getShortcutRegistrationKeys(key)
+  const registeredKeys: string[] = []
+  keysToRegister.forEach((shortcutKey) => {
+    if (globalShortcut.register(shortcutKey, callbacks[action])) {
+      registeredKeys.push(shortcutKey)
+    }
+  })
+
   shortcuts[action] = {
     action,
     key,
-    status: ok ? ShortcutStatus.Registered : ShortcutStatus.Failed
+    status: registeredKeys.length ? ShortcutStatus.Registered : ShortcutStatus.Failed,
+    registeredKeys
   }
 }
 
