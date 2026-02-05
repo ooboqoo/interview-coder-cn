@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { ChevronsUpDown, Check, Plus } from 'lucide-react'
+import { ChevronsUpDown, Check, Plus, X } from 'lucide-react'
+import { useSettingsStore } from '@/lib/store/settings'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import {
   Command,
@@ -33,13 +34,18 @@ export function SelectModel({
   className?: string
 }) {
   const [open, setOpen] = useState(false)
-  const [models, setModels] = useState(defaultModels)
   const [searchValue, setSearchValue] = useState('')
+  const { customModels, updateSetting } = useSettingsStore()
+
+  const models = useMemo(() => {
+    const customItems = customModels.map((m) => ({ value: m, label: m, isCustom: true }))
+    const defaultItems = defaultModels.map((m) => ({ ...m, isCustom: false }))
+    return [...customItems, ...defaultItems]
+  }, [customModels])
 
   const addCustomModel = (newModel: string) => {
-    const trimmed = newModel.trim()
-    if (!trimmed) return
-    const newValue = trimmed
+    const newValue = newModel.trim()
+    if (!newValue) return
     const exists = models.some((m) => m.value === newValue)
     if (exists) {
       onChange?.(newValue)
@@ -47,11 +53,20 @@ export function SelectModel({
       setSearchValue('')
       return
     }
-    const item = { value: newValue, label: trimmed }
-    setModels((prev) => [...prev, item])
+    updateSetting('customModels', [...customModels, newValue])
     onChange?.(newValue)
     setSearchValue('')
     setOpen(false)
+  }
+
+  const deleteCustomModel = (val: string) => {
+    updateSetting(
+      'customModels',
+      customModels.filter((m) => m !== val)
+    )
+    if (value === val) {
+      onChange?.('')
+    }
   }
 
   const filtered = models.filter((m) => m.label.toLowerCase().includes(searchValue.toLowerCase()))
@@ -68,7 +83,7 @@ export function SelectModel({
           disabled={disabled}
           className={cn('w-60 justify-between', className)}
         >
-          {value ? models.find((m) => m.value === value)?.label : '选择模型...'}
+          {value ? (models.find((m) => m.value === value)?.label ?? value) : '选择模型...'}
           <ChevronsUpDown className="opacity-50" />
         </Button>
       </PopoverTrigger>
@@ -84,20 +99,32 @@ export function SelectModel({
             <CommandEmpty>未找到结果</CommandEmpty>
             <CommandGroup>
               {filtered.map((m) => (
-                <CommandItem
-                  key={m.value}
-                  value={m.value}
-                  onSelect={(current) => {
-                    onChange?.(current === value ? '' : current)
-                    setSearchValue('')
-                    setOpen(false)
-                  }}
-                >
-                  {m.label}
-                  <Check
-                    className={cn('ml-auto', value === m.value ? 'opacity-100' : 'opacity-0')}
-                  />
-                </CommandItem>
+                <div key={m.value} className="group flex">
+                  <CommandItem
+                    value={m.value}
+                    onSelect={(current) => {
+                      onChange?.(current === value ? '' : current)
+                      setSearchValue('')
+                      setOpen(false)
+                    }}
+                    className="flex-1"
+                  >
+                    {m.label}
+                    <Check
+                      className={cn('ml-auto', value === m.value ? 'opacity-100' : 'opacity-0')}
+                    />
+                  </CommandItem>
+                  {m.isCustom && (
+                    <div className="hidden group-hover:flex">
+                      <button
+                        className="text-gray-400 hover:text-red-500 cursor-pointer"
+                        onClick={() => deleteCustomModel(m.value)}
+                      >
+                        <X className="h-6 w-6" />
+                      </button>
+                    </div>
+                  )}
+                </div>
               ))}
               {showCreate && (
                 <CommandItem

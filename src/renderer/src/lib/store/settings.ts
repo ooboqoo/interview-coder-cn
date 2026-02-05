@@ -6,6 +6,7 @@ interface Settings {
   apiBaseURL: string
   apiKey: string
   model: string
+  customModels: string[]
   customPrompt: string
 
   opacity: number
@@ -21,6 +22,7 @@ const defaultSettings: Settings = {
   apiBaseURL: '',
   apiKey: '',
   model: '',
+  customModels: [],
   customPrompt: '',
   codeLanguage: '',
 
@@ -40,7 +42,7 @@ export const useSettingsStore = create<SettingsStore>()(
     }),
     {
       name: 'interview-coder-settings',
-      version: 3
+      version: 4
     }
   )
 )
