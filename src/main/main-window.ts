@@ -34,6 +34,14 @@ export function createWindow(): void {
     mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
     app.dock?.show()
     mainWindow.setContentProtection(true)
+
+    // Reclaim top position when other apps steal it
+    mainWindow.on('always-on-top-changed', (_event, isAlwaysOnTop) => {
+      if (!isAlwaysOnTop && mainWindow.isVisible() && !mainWindow.isDestroyed()) {
+        // Only re-set the flag; avoid moveTop() to not disturb other window focus
+        mainWindow.setAlwaysOnTop(true, 'screen-saver', 1)
+      }
+    })
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {

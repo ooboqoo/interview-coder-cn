@@ -75,15 +75,46 @@ let conversationMessages: ModelMessage[] = []
 let recentScreenshots: string[] = [] // 最近截图，水平预览 (限5张)
 let hasAppendSeparator = false
 
-const FRONT_REASSERT_DURATION = 5000
-const FRONT_REASSERT_INTERVAL = 150
-const FRONT_RELATIVE_LEVEL = 10
+const FRONT_REASSERT_DURATION = 8000
+const FRONT_REASSERT_INTERVAL = 100
+const FRONT_RELATIVE_LEVEL = 100
+const BACKGROUND_GUARD_INTERVAL = 2000
 let frontReassertTimer: NodeJS.Timeout | null = null
+let backgroundGuardTimer: NodeJS.Timeout | null = null
 
-function applyTopMost(win: BrowserWindow) {
+/**
+ * Reassert always-on-top. `aggressive` also calls moveTop() which
+ * brings the window above everything — only use on explicit user actions
+ * (show, screenshot, etc.) to avoid disturbing interaction with other apps.
+ */
+function applyTopMost(win: BrowserWindow, aggressive = true) {
   if (!win || win.isDestroyed()) return
   win.setAlwaysOnTop(true, 'screen-saver', FRONT_RELATIVE_LEVEL)
-  win.moveTop()
+  if (aggressive) win.moveTop()
+}
+
+/**
+ * Start a persistent low-frequency background guard that continuously
+ * re-asserts always-on-top while the window is visible.
+ * Uses the non-aggressive variant so it won't steal focus or
+ * interfere with the user's interaction with other windows.
+ */
+function startBackgroundGuard(window: BrowserWindow) {
+  if (backgroundGuardTimer) return // already running
+  backgroundGuardTimer = setInterval(() => {
+    if (!window || window.isDestroyed() || !window.isVisible()) {
+      stopBackgroundGuard()
+      return
+    }
+    applyTopMost(window, false)
+  }, BACKGROUND_GUARD_INTERVAL)
+}
+
+function stopBackgroundGuard() {
+  if (backgroundGuardTimer) {
+    clearInterval(backgroundGuardTimer)
+    backgroundGuardTimer = null
+  }
 }
 
 function keepWindowInFront(window: BrowserWindow) {
@@ -102,6 +133,7 @@ function keepWindowInFront(window: BrowserWindow) {
 
   if (!reassert()) return
 
+  // Aggressive burst: rapid reasserts for a short period
   frontReassertTimer = setInterval(() => {
     const shouldStop = Date.now() - start > FRONT_REASSERT_DURATION
     if (shouldStop || !reassert()) {
@@ -111,6 +143,9 @@ function keepWindowInFront(window: BrowserWindow) {
       }
     }
   }, FRONT_REASSERT_INTERVAL)
+
+  // Ensure background guard is running for persistent protection
+  startBackgroundGuard(window)
 }
 
 function abortCurrentStream(reason: AbortReason) {
@@ -124,6 +159,7 @@ const callbacks: Record<string, () => void> = {
     const mainWindow = global.mainWindow
     if (!mainWindow || mainWindow.isDestroyed()) return
     if (mainWindow.isVisible()) {
+      stopBackgroundGuard()
       mainWindow.hide()
     } else {
       // 重新显示时不断重申置顶属性，抵消其他前台软件持续抢占
