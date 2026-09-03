@@ -1,5 +1,4 @@
-import { globalShortcut, ipcMain, screen } from 'electron'
-import type { BrowserWindow } from 'electron'
+import { BrowserWindow, globalShortcut, ipcMain, screen } from 'electron'
 import type { ModelMessage } from 'ai'
 import { applyContentProtection } from './main-window'
 import {
@@ -14,6 +13,12 @@ import { getSolutionStream, getFollowUpStream, getGeneralStream } from './ai'
 import { state } from './state'
 import { settings } from './settings'
 import { getTranscriptionText, clearTranscriptionText } from './transcription'
+import { drainDrafts, removeLastDraft } from './draft-screenshots'
+import {
+  cancelRegionSelection,
+  recordRegionSelectionClick,
+  startRegionSelection
+} from './region-selection'
 
 /**
  * Extract meaningful error message from API errors
@@ -86,6 +91,16 @@ let recentScreenshots: string[] = [] // 最近截图，水平预览 (限5张)
 /** Every screenshot in the current conversation, including the ones dropped from the preview */
 let screenshotCount = 0
 let hasAppendSeparator = false
+let draftScreenshots: string[] = []
+
+function publishDraftScreenshots(window: BrowserWindow) {
+  window.webContents.send('draft-screenshots-updated', draftScreenshots)
+}
+
+function addDraftScreenshot(window: BrowserWindow, screenshot: string) {
+  draftScreenshots = [...draftScreenshots, screenshot]
+  publishDraftScreenshots(window)
+}
 
 const FRONT_REASSERT_DURATION = 8000
 const FRONT_REASSERT_INTERVAL = 100
@@ -243,6 +258,123 @@ function abortCurrentStream(reason: AbortReason) {
   currentStreamContext.controller.abort()
 }
 
+type ImageBatchMode = 'new' | 'append'
+
+function buildImageMessage(
+  images: string[],
+  mode: ImageBatchMode,
+  transcriptionText: string
+): ModelMessage {
+  const baseText =
+    mode === 'new' ? '这是屏幕截图' : '这是下一部分截图，请结合之前所有截图和分析，继续分析解答。'
+  const text = transcriptionText
+    ? `这是语音转录内容：\n${transcriptionText}\n\n${baseText}`
+    : baseText
+
+  return {
+    role: 'user',
+    content: [{ type: 'text', text }, ...images.map((image) => ({ type: 'image' as const, image }))]
+  }
+}
+
+async function sendImageBatch(
+  images: string[],
+  mode: ImageBatchMode,
+  onRequestStarted?: () => void
+): Promise<boolean> {
+  const mainWindow = global.mainWindow
+  if (!mainWindow || mainWindow.isDestroyed() || images.length === 0) return false
+
+  const transcriptionText = getTranscriptionText()
+  const userMessage = buildImageMessage(images, mode, transcriptionText)
+  const nextConversation = mode === 'new' ? [userMessage] : [...conversationMessages, userMessage]
+  const nextRecentScreenshots =
+    mode === 'new' ? images.slice(-5) : [...recentScreenshots, ...images].slice(-5)
+  const nextScreenshotCount = mode === 'new' ? images.length : screenshotCount + images.length
+  const streamContext: StreamContext = {
+    controller: new AbortController(),
+    reason: null
+  }
+
+  abortCurrentStream('new-request')
+
+  let solutionStream: AsyncIterable<string>
+  try {
+    solutionStream =
+      mode === 'new'
+        ? getSolutionStream(nextConversation, streamContext.controller.signal)
+        : getGeneralStream(nextConversation, streamContext.controller.signal)
+  } catch (error) {
+    console.error('Error starting image solution:', error)
+    mainWindow.webContents.send('solution-error', extractErrorMessage(error))
+    return false
+  }
+
+  conversationMessages = nextConversation
+  recentScreenshots = nextRecentScreenshots
+  screenshotCount = nextScreenshotCount
+  const addAppendSeparator = mode === 'append' && !hasAppendSeparator
+  hasAppendSeparator = mode === 'append'
+  currentStreamContext = streamContext
+
+  if (mode === 'new') {
+    mainWindow.webContents.send('solution-clear')
+  } else {
+    mainWindow.webContents.send('solution-chunk', addAppendSeparator ? '\n\n---\n\n' : '\n\n')
+  }
+  mainWindow.webContents.send('screenshot-taken', images.at(-1))
+  mainWindow.webContents.send('screenshots-updated', recentScreenshots, screenshotCount)
+  mainWindow.webContents.send('ai-loading-start')
+
+  if (transcriptionText) {
+    clearTranscriptionText()
+    mainWindow.webContents.send('transcription-cleared')
+  }
+  onRequestStarted?.()
+
+  let endedNaturally = true
+  let assistantResponse = ''
+  try {
+    for await (const chunk of solutionStream) {
+      if (streamContext.controller.signal.aborted) {
+        endedNaturally = false
+        break
+      }
+      assistantResponse += chunk
+      mainWindow.webContents.send('solution-chunk', chunk)
+    }
+
+    if (streamContext.controller.signal.aborted) {
+      if (streamContext.reason === 'user') {
+        mainWindow.webContents.send('solution-stopped')
+      }
+    } else if (endedNaturally) {
+      if (assistantResponse) {
+        conversationMessages.push({ role: 'assistant', content: assistantResponse })
+      }
+      mainWindow.webContents.send('solution-complete')
+    }
+  } catch (error) {
+    if (streamContext.controller.signal.aborted) {
+      if (streamContext.reason === 'user') {
+        mainWindow.webContents.send('solution-stopped')
+      }
+    } else {
+      console.error('Error streaming image solution:', error)
+      mainWindow.webContents.send('solution-error', extractErrorMessage(error))
+    }
+  } finally {
+    if (currentStreamContext === streamContext) {
+      currentStreamContext = null
+      if (!mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('ai-loading-end')
+      }
+    }
+  }
+
+  return true
+}
+
 const callbacks: Record<string, () => void> = {
   hideOrShowMainWindow: async () => {
     const mainWindow = global.mainWindow
@@ -277,236 +409,65 @@ const callbacks: Record<string, () => void> = {
     if (!mainWindow || mainWindow.isDestroyed() || !state.inCoderPage || !settings.apiKey) return
 
     abortCurrentStream('new-request')
-    let loadingStarted = false
     const screenshotData = await takeScreenshot()
-    if (screenshotData && mainWindow && !mainWindow.isDestroyed()) {
-      saveScreenshotToDisk(screenshotData)
-      const transcriptionText = getTranscriptionText()
-      if (transcriptionText) {
-        clearTranscriptionText()
-        mainWindow.webContents.send('transcription-cleared')
-      }
-      conversationMessages = [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: transcriptionText
-                ? `这是语音转录内容：\n${transcriptionText}\n\n同时附上屏幕截图：`
-                : '这是屏幕截图'
-            },
-            {
-              type: 'image',
-              image: screenshotData
-            }
-          ]
-        }
-      ]
-
-      const streamContext: StreamContext = {
-        controller: new AbortController(),
-        reason: null
-      }
-      currentStreamContext = streamContext
-      recentScreenshots = [screenshotData]
-      screenshotCount = 1
-      hasAppendSeparator = false
-      mainWindow.webContents.send('solution-clear')
-      mainWindow.webContents.send('screenshots-updated', recentScreenshots, screenshotCount)
-      mainWindow.webContents.send('screenshot-taken', screenshotData)
-      mainWindow.webContents.send('ai-loading-start')
-      loadingStarted = true
-      let endedNaturally = true
-      let streamStarted = false
-      let assistantResponse = ''
-      try {
-        const solutionStream = getSolutionStream(
-          conversationMessages,
-          streamContext.controller.signal
-        )
-        streamStarted = true
-        try {
-          for await (const chunk of solutionStream) {
-            if (streamContext.controller.signal.aborted) {
-              endedNaturally = false
-              break
-            }
-            assistantResponse += chunk
-            mainWindow.webContents.send('solution-chunk', chunk)
-          }
-        } catch (error) {
-          if (!streamContext.controller.signal.aborted) {
-            endedNaturally = false
-            console.error('Error streaming solution:', error)
-            mainWindow.webContents.send('solution-error', extractErrorMessage(error))
-          } else {
-            endedNaturally = false
-          }
-        }
-
-        if (streamContext.controller.signal.aborted) {
-          if (streamContext.reason === 'user') {
-            mainWindow.webContents.send('solution-stopped')
-          }
-        } else if (endedNaturally) {
-          // Add assistant response to conversation history
-          if (assistantResponse) {
-            conversationMessages.push({
-              role: 'assistant',
-              content: assistantResponse
-            })
-          }
-          mainWindow.webContents.send('solution-complete')
-        }
-      } catch (error) {
-        if (streamContext.controller.signal.aborted) {
-          if (streamContext.reason === 'user') {
-            mainWindow.webContents.send('solution-stopped')
-          }
-        } else {
-          endedNaturally = false
-          console.error('Error streaming solution:', error)
-          mainWindow.webContents.send('solution-error', extractErrorMessage(error))
-        }
-      } finally {
-        if (currentStreamContext === streamContext) {
-          currentStreamContext = null
-        }
-        if (!streamStarted && streamContext.reason === 'user') {
-          mainWindow.webContents.send('solution-stopped')
-        }
-        if (loadingStarted && mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('ai-loading-end')
-        }
-      }
-    }
+    if (!screenshotData) return
+    saveScreenshotToDisk(screenshotData)
+    await sendImageBatch([screenshotData], 'new')
   },
 
-  // Append screenshot for continuous capture (if conversation exists)
+  // Capture an image for later submission without changing the active conversation.
   appendScreenshot: async () => {
     const mainWindow = global.mainWindow
     if (!mainWindow || mainWindow.isDestroyed() || !state.inCoderPage || !settings.apiKey) return
 
-    // Fallback to first screenshot if no conversation
-    if (conversationMessages.length === 0) {
-      callbacks.takeScreenshot()
+    const screenshotData = await takeScreenshot()
+    if (!screenshotData) return
+    saveScreenshotToDisk(screenshotData)
+    addDraftScreenshot(mainWindow, screenshotData)
+  },
+
+  deleteLastDraftScreenshot: () => {
+    const mainWindow = global.mainWindow
+    if (!mainWindow || mainWindow.isDestroyed()) return
+    draftScreenshots = removeLastDraft(draftScreenshots)
+    publishDraftScreenshots(mainWindow)
+  },
+
+  clearDraftScreenshots: () => {
+    const mainWindow = global.mainWindow
+    if (!mainWindow || mainWindow.isDestroyed()) return
+    draftScreenshots = []
+    publishDraftScreenshots(mainWindow)
+  },
+  takeRegionScreenshot: () => {
+    const mainWindow = global.mainWindow
+    if (!mainWindow || mainWindow.isDestroyed() || !state.inCoderPage) return
+    startRegionSelection({
+      onImageSelected: (screenshot) => {
+        if (mainWindow.isDestroyed()) return
+        saveScreenshotToDisk(screenshot)
+        addDraftScreenshot(mainWindow, screenshot)
+      },
+      onError: (message) => {
+        if (!mainWindow.isDestroyed()) mainWindow.webContents.send('operation-error', message)
+      }
+    })
+  },
+
+  // Submit every queued draft as the next turn in the current conversation.
+  sendDraftScreenshots: async () => {
+    const mainWindow = global.mainWindow
+    if (!mainWindow || mainWindow.isDestroyed() || !state.inCoderPage || !settings.apiKey) return
+    const { batch, remaining } = drainDrafts(draftScreenshots)
+    if (batch.length === 0) {
+      mainWindow.webContents.send('operation-error', '没有待发送的截图')
       return
     }
-
-    abortCurrentStream('new-request')
-    let loadingStarted = false
-
-    const screenshotData = await takeScreenshot()
-    if (screenshotData && mainWindow && !mainWindow.isDestroyed()) {
-      saveScreenshotToDisk(screenshotData)
-      const transcriptionText = getTranscriptionText()
-      if (transcriptionText) {
-        clearTranscriptionText()
-        mainWindow.webContents.send('transcription-cleared')
-      }
-      // Append new image message to conversation
-      const newUserMessage: ModelMessage = {
-        role: 'user',
-        content: [
-          {
-            type: 'text',
-            text: transcriptionText
-              ? `这是下一部分截图和语音转录内容：\n${transcriptionText}\n请结合之前所有截图和分析，继续分析解答，不要遗漏任何信息。`
-              : '这是下一部分截图，请结合之前所有截图和分析，继续分析解答，不要遗漏任何信息。'
-          },
-          {
-            type: 'image',
-            image: screenshotData
-          }
-        ]
-      }
-      conversationMessages.push(newUserMessage)
-
-      const streamContext: StreamContext = {
-        controller: new AbortController(),
-        reason: null
-      }
-      currentStreamContext = streamContext
-
-      recentScreenshots.push(screenshotData)
-      recentScreenshots = recentScreenshots.slice(-5) // 限5张
-      screenshotCount += 1
-      mainWindow.webContents.send('screenshot-taken', screenshotData)
-      mainWindow.webContents.send('screenshots-updated', recentScreenshots, screenshotCount)
-      if (!hasAppendSeparator) {
-        mainWindow.webContents.send('solution-chunk', '\n\n---\n\n')
-        hasAppendSeparator = true
-      } else {
-        mainWindow.webContents.send('solution-chunk', '\n\n')
-      }
-      mainWindow.webContents.send('ai-loading-start')
-      loadingStarted = true
-
-      let endedNaturally = true
-      let streamStarted = false
-      let assistantResponse = ''
-      try {
-        const solutionStream = getGeneralStream(
-          conversationMessages,
-          streamContext.controller.signal
-        )
-        streamStarted = true
-        try {
-          for await (const chunk of solutionStream) {
-            if (streamContext.controller.signal.aborted) {
-              endedNaturally = false
-              break
-            }
-            assistantResponse += chunk
-            mainWindow.webContents.send('solution-chunk', chunk)
-          }
-        } catch (error) {
-          if (!streamContext.controller.signal.aborted) {
-            endedNaturally = false
-            console.error('Error streaming continuous solution:', error)
-            mainWindow.webContents.send('solution-error', extractErrorMessage(error))
-          } else {
-            endedNaturally = false
-          }
-        }
-
-        if (streamContext.controller.signal.aborted) {
-          if (streamContext.reason === 'user') {
-            mainWindow.webContents.send('solution-stopped')
-          }
-        } else if (endedNaturally) {
-          // Add assistant response to conversation history
-          if (assistantResponse) {
-            conversationMessages.push({
-              role: 'assistant',
-              content: assistantResponse
-            })
-          }
-          mainWindow.webContents.send('solution-complete')
-        }
-      } catch (error) {
-        if (streamContext.controller.signal.aborted) {
-          if (streamContext.reason === 'user') {
-            mainWindow.webContents.send('solution-stopped')
-          }
-        } else {
-          endedNaturally = false
-          console.error('Error streaming continuous solution:', error)
-          mainWindow.webContents.send('solution-error', extractErrorMessage(error))
-        }
-      } finally {
-        if (currentStreamContext === streamContext) {
-          currentStreamContext = null
-        }
-        if (!streamStarted && streamContext.reason === 'user') {
-          mainWindow.webContents.send('solution-stopped')
-        }
-        if (loadingStarted && mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('ai-loading-end')
-        }
-      }
-    }
+    const mode: ImageBatchMode = conversationMessages.length === 0 ? 'new' : 'append'
+    await sendImageBatch(batch, mode, () => {
+      draftScreenshots = remaining
+      publishDraftScreenshots(mainWindow)
+    })
   },
 
   // Stop current AI solution stream
@@ -588,6 +549,10 @@ const callbacks: Record<string, () => void> = {
 const clickableActions = new Set([
   'takeScreenshot',
   'appendScreenshot',
+  'takeRegionScreenshot',
+  'sendDraftScreenshots',
+  'deleteLastDraftScreenshot',
+  'clearDraftScreenshots',
   'stopSolutionStream',
   'ignoreOrEnableMouse',
   'increaseOpacity',
@@ -660,6 +625,7 @@ function registerShortcut(action: string, key: string) {
 }
 
 ipcMain.handle('getShortcuts', () => shortcuts)
+ipcMain.handle('getDraftScreenshots', () => [...draftScreenshots])
 
 ipcMain.handle(
   'initShortcuts',
@@ -683,6 +649,8 @@ ipcMain.handle('stopSolutionStream', () => {
   abortCurrentStream('user')
   return true
 })
+ipcMain.handle('region-selection-click', () => recordRegionSelectionClick())
+ipcMain.handle('region-selection-cancel', () => cancelRegionSelection())
 
 ipcMain.handle('triggerAction', (_event, action: string) => {
   if (!clickableActions.has(action)) return false

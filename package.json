@@ -15,6 +15,7 @@
     "typecheck:node": "tsc -p tsconfig.node.json",
     "typecheck:web": "tsc -p tsconfig.web.json",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
+    "test:unit": "esbuild src/main/draft-screenshots.ts src/main/screenshot-source.ts --platform=node --format=cjs --outdir=out/test --out-extension:.js=.cjs && node --test tests/main/draft-screenshots.test.cjs",
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
     "build": "npm run typecheck && electron-vite build",

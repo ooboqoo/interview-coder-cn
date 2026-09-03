@@ -11,9 +11,11 @@ const SCROLL_OFFSET = 120
 export function AppContent() {
   const {
     screenshotData,
+    draftScreenshots,
     solutionChunks,
     errorMessage,
     setScreenshotData,
+    setDraftScreenshots,
     setIsLoading,
     addSolutionChunk,
     setErrorMessage,
@@ -37,6 +39,8 @@ export function AppContent() {
       setRecentScreenshots(screenshots)
       setScreenshotTotal(total)
     })
+    window.api.onDraftScreenshotsUpdated(setDraftScreenshots)
+    void window.api.getDraftScreenshots().then(setDraftScreenshots)
 
     // New session clear (pictures + answers)
     window.api.onSolutionClear(() => {
@@ -65,12 +69,20 @@ export function AppContent() {
     return () => {
       window.api.removeScreenshotListener()
       window.api.removeScreenshotsUpdatedListener()
+      window.api.removeDraftScreenshotsUpdatedListener()
       window.api.removeSolutionChunkListener()
       window.api.removeAiLoadingStartListener()
       window.api.removeAiLoadingEndListener()
       window.api.removeSolutionClearListener()
     }
-  }, [setScreenshotData, clearSolution, setIsLoading, addSolutionChunk, setErrorMessage])
+  }, [
+    setScreenshotData,
+    setDraftScreenshots,
+    clearSolution,
+    setIsLoading,
+    addSolutionChunk,
+    setErrorMessage
+  ])
 
   useEffect(() => {
     window.api.onSolutionComplete(() => {
@@ -83,10 +95,14 @@ export function AppContent() {
       setIsLoading(false)
       setErrorMessage(message)
     })
+    window.api.onOperationError((message: string) => {
+      setErrorMessage(message)
+    })
     return () => {
       window.api.removeSolutionCompleteListener()
       window.api.removeSolutionStoppedListener()
       window.api.removeSolutionErrorListener()
+      window.api.removeOperationErrorListener()
     }
   }, [setIsLoading, setErrorMessage])
 
@@ -142,7 +158,7 @@ export function AppContent() {
             />
           </svg>
           <div className="flex-1 min-w-0">
-            <p className="text-red-400 font-medium text-sm">API 调用失败</p>
+            <p className="text-red-400 font-medium text-sm">操作失败</p>
             <p className="text-red-300/80 text-sm mt-0.5 break-words">{errorMessage}</p>
           </div>
           <button
@@ -162,7 +178,18 @@ export function AppContent() {
         </div>
       )}
 
-      {/* Screenshots, rendered as the `screenshotDisplay` setting asks */}
+      {draftScreenshots.length > 0 && (
+        <div className="mb-4 border-l-2 border-amber-300/70 pl-3">
+          <p className="mb-2 text-sm text-amber-100">待发送截图（{draftScreenshots.length} 张）</p>
+          <Screenshots
+            screenshots={draftScreenshots}
+            total={draftScreenshots.length}
+            display="gallery"
+          />
+        </div>
+      )}
+
+      {/* Submitted screenshots, rendered as the `screenshotDisplay` setting asks */}
       {screenshots.length === 0 ? (
         <ShortcutTip />
       ) : (
@@ -172,7 +199,6 @@ export function AppContent() {
           display={screenshotDisplay}
         />
       )}
-
       {/* Solution Display */}
       <MarkdownRenderer>{solutionChunks.join('')}</MarkdownRenderer>
     </div>

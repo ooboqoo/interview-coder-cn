@@ -1,24 +1,28 @@
-import { desktopCapturer, screen } from 'electron'
+import { desktopCapturer, screen, type NativeImage } from 'electron'
+import { selectScreenshotSource, type ScreenshotSourceSelectionOptions } from './screenshot-source'
 
-export function takeScreenshot(): Promise<string | void> {
-  const mainWindow = global.mainWindow
-  if (!mainWindow || mainWindow.isDestroyed()) return Promise.resolve()
-
-  // Get the primary display's size.
+export function takeScreenshotImage(
+  options: ScreenshotSourceSelectionOptions = {}
+): Promise<NativeImage | undefined> {
   const primaryDisplay = screen.getPrimaryDisplay()
-  const { width, height } = primaryDisplay.size
-
+  const selectionOptions = options.requirePrimaryDisplay
+    ? { ...options, displayCount: screen.getAllDisplays().length }
+    : options
   return desktopCapturer
-    .getSources({ types: ['screen'], thumbnailSize: { width, height } })
+    .getSources({ types: ['screen'], thumbnailSize: primaryDisplay.size })
     .then((sources) => {
-      if (sources.length > 0) {
-        const screenshot = sources[0]?.thumbnail.toPNG()
-        const base64Data = screenshot.toString('base64')
-        return base64Data
-      }
-      return undefined
+      return selectScreenshotSource(sources, String(primaryDisplay.id), selectionOptions)?.thumbnail
     })
     .catch((error) => {
       console.error('Error taking screenshot:', error)
+      return undefined
     })
+}
+
+export async function takeScreenshot(): Promise<string | undefined> {
+  const mainWindow = global.mainWindow
+  if (!mainWindow || mainWindow.isDestroyed()) return undefined
+
+  const image = await takeScreenshotImage()
+  return image?.toPNG().toString('base64')
 }
