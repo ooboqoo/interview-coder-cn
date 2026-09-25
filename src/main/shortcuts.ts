@@ -244,6 +244,33 @@ function abortCurrentStream(reason: AbortReason) {
   currentStreamContext.controller.abort()
 }
 
+/**
+ * When the current request started, or null when none is running.
+ *
+ * Timing is done here rather than in the renderer: the renderer's timers are
+ * throttled while the window is hidden or the display is asleep, which is
+ * exactly when this app is most likely to be waiting on a long answer.
+ */
+let requestStartedAt: number | null = null
+
+/** Start timing a request; called the moment the user presses the shortcut */
+function startTiming() {
+  requestStartedAt = Date.now()
+}
+
+/**
+ * Report how long the request took, in milliseconds. Called from every
+ * terminal path (finished, stopped, failed) so no outcome is left untimed.
+ */
+function reportDuration() {
+  if (requestStartedAt === null) return
+  const elapsed = Date.now() - requestStartedAt
+  requestStartedAt = null
+  const mainWindow = global.mainWindow
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  mainWindow.webContents.send('solution-duration', elapsed)
+}
+
 const callbacks: Record<string, () => void> = {
   hideOrShowMainWindow: async () => {
     const mainWindow = global.mainWindow
@@ -278,6 +305,8 @@ const callbacks: Record<string, () => void> = {
     if (!mainWindow || mainWindow.isDestroyed() || !state.inCoderPage || !settings.apiKey) return
 
     abortCurrentStream('new-request')
+    // Timing covers the whole wait the user experiences: capture + request + render
+    startTiming()
     let loadingStarted = false
     const screenshotData = await takeScreenshot()
     if (screenshotData && mainWindow && !mainWindow.isDestroyed()) {
@@ -379,6 +408,11 @@ const callbacks: Record<string, () => void> = {
         if (!streamStarted && streamContext.reason === 'user') {
           mainWindow.webContents.send('solution-stopped')
         }
+        // A stream aborted by a newer request must not report: the new request
+        // has already restarted the timer, and reporting here would cut it short
+        if (streamContext.reason !== 'new-request') {
+          reportDuration()
+        }
         if (loadingStarted && mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('ai-loading-end')
         }
@@ -398,6 +432,7 @@ const callbacks: Record<string, () => void> = {
     }
 
     abortCurrentStream('new-request')
+    startTiming()
     let loadingStarted = false
 
     const screenshotData = await takeScreenshot()
@@ -506,6 +541,11 @@ const callbacks: Record<string, () => void> = {
         }
         if (!streamStarted && streamContext.reason === 'user') {
           mainWindow.webContents.send('solution-stopped')
+        }
+        // A stream aborted by a newer request must not report: the new request
+        // has already restarted the timer, and reporting here would cut it short
+        if (streamContext.reason !== 'new-request') {
+          reportDuration()
         }
         if (loadingStarted && mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('ai-loading-end')
@@ -727,6 +767,7 @@ ipcMain.handle('sendFollowUpQuestion', async (_event, question: string) => {
   }
 
   abortCurrentStream('new-request')
+  startTiming()
   const streamContext: StreamContext = {
     controller: new AbortController(),
     reason: null
@@ -808,6 +849,11 @@ ipcMain.handle('sendFollowUpQuestion', async (_event, question: string) => {
     }
     if (!streamStarted && streamContext.reason === 'user') {
       mainWindow.webContents.send('solution-stopped')
+    }
+    // A stream aborted by a newer request must not report: the new request has
+    // already restarted the timer, and reporting here would cut it short
+    if (streamContext.reason !== 'new-request') {
+      reportDuration()
     }
   }
 

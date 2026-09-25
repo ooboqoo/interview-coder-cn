@@ -5,6 +5,8 @@ interface SolutionState {
   solutionChunks: string[]
   screenshotData: string | null
   errorMessage: string | null
+  /** How long the last request took, in ms; null until one has finished */
+  durationMs: number | null
 }
 
 interface SolutionStore extends SolutionState {
@@ -13,6 +15,7 @@ interface SolutionStore extends SolutionState {
   setSolutionChunks: (chunks: string[]) => void
   setScreenshotData: (data: string | null) => void
   setErrorMessage: (message: string | null) => void
+  setDurationMs: (ms: number | null) => void
   clearSolution: () => void
   resetState: () => void
 }
@@ -21,7 +24,8 @@ const defaultState: SolutionState = {
   isLoading: false,
   solutionChunks: [],
   screenshotData: null,
-  errorMessage: null
+  errorMessage: null,
+  durationMs: null
 }
 
 export const useSolutionStore = create<SolutionStore>()((set) => ({
@@ -43,8 +47,12 @@ export const useSolutionStore = create<SolutionStore>()((set) => ({
   setErrorMessage: (message) => {
     set({ errorMessage: message })
   },
+  setDurationMs: (ms) => {
+    set({ durationMs: ms })
+  },
   clearSolution: () => {
-    set({ solutionChunks: [], isLoading: false, errorMessage: null })
+    // A new request is starting, so the previous timing no longer applies
+    set({ solutionChunks: [], isLoading: false, errorMessage: null, durationMs: null })
   },
   resetState: () => {
     set(defaultState)

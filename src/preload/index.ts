@@ -94,6 +94,14 @@ const api = {
     ipcRenderer.removeAllListeners('switch-api-profile')
   },
 
+  // How long the finished request took, in milliseconds (measured in main)
+  onSolutionDuration: (callback: (ms: number) => void) => {
+    ipcRenderer.on('solution-duration', (_event, ms: number) => callback(ms))
+  },
+  removeSolutionDurationListener: () => {
+    ipcRenderer.removeAllListeners('solution-duration')
+  },
+
   // Listen for screenshot events
   onScreenshotTaken: (callback: (screenshotData: string) => void) => {
     ipcRenderer.on('screenshot-taken', (_event, screenshotData) => {
