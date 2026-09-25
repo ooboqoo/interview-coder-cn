@@ -10,6 +10,7 @@ import {
   EyeOff,
   Keyboard,
   FolderOpen,
+  FileCode,
   Mic,
   Plus,
   RotateCcw,
@@ -40,6 +41,7 @@ import {
 import type { Theme } from '@/lib/theme'
 import { isMac } from '@/lib/utils/env'
 import { ModelField } from './ModelField'
+import { ApiProfiles } from './ApiProfiles'
 import { SelectBaseURL } from './SelectBaseURL'
 import { changeApiBaseURL } from '@/lib/model-switch'
 import { CustomShortcuts, ResetDefaultShortcuts } from './CustomShortcuts'
@@ -57,6 +59,7 @@ export default function SettingsPage() {
     opacity,
     resizable,
     showOverlayToolbar,
+    hideShortcutHints,
     toolbarHoverDelay,
     screenshotDisplay,
     apiBaseURL,
@@ -65,6 +68,9 @@ export default function SettingsPage() {
     activeSceneId,
     screenshotAutoSave,
     screenshotDir,
+    codeAutoSave,
+    codeSaveDir,
+    codeCopyToClipboard,
     dashscopeApiKey,
     audioInputDeviceId,
     audioOutputDeviceId,
@@ -146,6 +152,8 @@ export default function SettingsPage() {
           </h2>
 
           <div className="space-y-4">
+            <ApiProfiles />
+
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium">
                 API Base URL
@@ -508,6 +516,20 @@ export default function SettingsPage() {
 
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium">
+                隐藏快捷键提醒
+                <span className="ml-2 text-xs font-light">
+                  开启后，主界面底部不再显示「追加截图」「新开对话」的快捷键提示
+                </span>
+              </label>
+              <Switch
+                className="scale-y-90"
+                checked={hideShortcutHints}
+                onCheckedChange={(checked) => updateSetting('hideShortcutHints', checked)}
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium">
                 悬浮工具条
                 <span className="ml-2 text-xs font-light">
                   在主窗口上方显示一排按钮，可用鼠标点击替代快捷键操作，详见帮助中心
@@ -601,6 +623,65 @@ export default function SettingsPage() {
                 </button>
               </div>
             )}
+          </div>
+        </div>
+
+        {/* Generated Code Save Settings */}
+        <div className="bg-gray-300/80 rounded-lg p-6">
+          <h2 className="text-lg font-semibold mb-4 flex items-center">
+            <FileCode className="h-5 w-5 mr-2" />
+            算法题保存到本地
+          </h2>
+
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium">
+                保存代码到本地
+                <span className="ml-2 text-xs font-light">
+                  开启后，解答里包含代码时会按语言自动保存为源文件
+                </span>
+              </label>
+              <Switch
+                className="scale-y-90"
+                checked={codeAutoSave}
+                onCheckedChange={(checked) => updateSetting('codeAutoSave', checked)}
+              />
+            </div>
+            {codeAutoSave && (
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium">
+                  保存目录
+                  <span className="ml-2 text-xs font-light">
+                    文件依次命名为 Test1.java、Test2.py
+                    等，重名自动往后排（选择弹窗可能被本窗口遮挡）
+                  </span>
+                </label>
+                <button
+                  className="text-xs text-gray-600 max-w-48 truncate hover:text-gray-900 cursor-pointer transition-colors"
+                  title="点击选择保存目录"
+                  onClick={async () => {
+                    const dir = await window.api.selectCodeDir()
+                    if (dir) updateSetting('codeSaveDir', dir)
+                  }}
+                >
+                  {codeSaveDir || '未选择目录（未选择时不会保存）'}
+                </button>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium">
+                保存到剪贴板
+                <span className="ml-2 text-xs font-light">
+                  开启后，解答里的代码会自动复制到剪贴板，可直接粘贴到编辑器
+                </span>
+              </label>
+              <Switch
+                className="scale-y-90"
+                checked={codeCopyToClipboard}
+                onCheckedChange={(checked) => updateSetting('codeCopyToClipboard', checked)}
+              />
+            </div>
           </div>
         </div>
 

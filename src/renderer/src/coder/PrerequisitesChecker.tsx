@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { Eye, EyeOff } from 'lucide-react'
 import { useSettingsStore } from '@/lib/store/settings'
@@ -6,12 +6,29 @@ import { Button } from '@/components/ui/button'
 import { SelectBaseURL } from '@/settings/SelectBaseURL'
 import { changeApiBaseURL } from '@/lib/model-switch'
 
+/** Whether any saved profile already holds a key, even if the flag is not set yet */
+function hasAnyKeyStored(): boolean {
+  const store = useSettingsStore.getState()
+  return store.apiKey.trim() !== '' || store.apiProfiles.some((p) => p.apiKey.trim() !== '')
+}
+
 export function PrerequisitesChecker() {
   const navigate = useNavigate()
-  const { apiKey, apiBaseURL, updateSetting } = useSettingsStore()
+  const { apiKey, apiBaseURL, hasConfiguredApi, updateSetting } = useSettingsStore()
   const [inputApiKey, setInputApiKey] = useState(apiKey)
   const [inputApiBaseURL, setInputApiBaseURL] = useState(apiBaseURL)
   const [showApiKey, setShowApiKey] = useState(false)
+
+  // The dialog only asks for a key once in the app's life. It used to key off
+  // the live `apiKey`, which reappeared whenever the user switched to a profile
+  // that was still blank — while they were mid-task, over the whole window.
+  const shouldShow = !hasConfiguredApi && !hasAnyKeyStored()
+
+  // Adopt a key that was configured in the settings page while this was hidden
+  useEffect(() => {
+    if (hasConfiguredApi) return
+    if (hasAnyKeyStored()) useSettingsStore.getState().markApiConfigured()
+  }, [hasConfiguredApi])
 
   const saveApiKey = () => {
     if (inputApiKey.trim()) {
@@ -23,10 +40,7 @@ export function PrerequisitesChecker() {
     }
   }
 
-  // If apiKey exists, skip this checker
-  if (apiKey) {
-    return null
-  }
+  if (!shouldShow) return null
 
   return (
     <div className="fixed top-9 left-0 right-0 bottom-0 flex bg-black/50">

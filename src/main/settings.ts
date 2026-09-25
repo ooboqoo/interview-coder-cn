@@ -46,6 +46,17 @@ ipcMain.handle('selectScreenshotDir', async () => {
   return result.filePaths[0]
 })
 
+ipcMain.handle('selectCodeDir', async () => {
+  const result = await dialog.showOpenDialog({
+    properties: ['openDirectory', 'createDirectory'],
+    title: '选择代码保存目录'
+  })
+  if (result.canceled || result.filePaths.length === 0) {
+    return null
+  }
+  return result.filePaths[0]
+})
+
 export const settings = {
   /** Window colour scheme, kept in sync with the renderer; see renderer lib/theme.ts */
   theme: 'dark' as 'dark' | 'light',
@@ -63,6 +74,11 @@ export const settings = {
   toolbarHoverDelay: 0,
   screenshotAutoSave: false,
   screenshotDir: '',
+  /** Save the code block of a finished answer as a source file */
+  codeAutoSave: false,
+  codeSaveDir: '',
+  /** Copy the code block of a finished answer to the system clipboard */
+  codeCopyToClipboard: false,
   dashscopeApiKey: '',
   hideDockIcon: false,
   audioInputDeviceId: '',

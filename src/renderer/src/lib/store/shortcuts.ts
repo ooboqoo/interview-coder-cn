@@ -71,6 +71,16 @@ const defaultShortcuts: Record<string, Omit<Shortcut, 'defaultKey'>> = {
     key: `${platformAlt}+.`,
     category: 'Screenshot & AI'
   },
+  previousApiProfile: {
+    action: 'previousApiProfile',
+    key: `${platformAlt}+[`,
+    category: 'Screenshot & AI'
+  },
+  nextApiProfile: {
+    action: 'nextApiProfile',
+    key: `${platformAlt}+]`,
+    category: 'Screenshot & AI'
+  },
   toggleTranscription: {
     action: 'toggleTranscription',
     key: `${platformAlt}+T`,
@@ -168,6 +178,22 @@ export const useShortcutsStore = create<ShortcutsStore>()(
         }
 
         return merged
+      },
+      merge: (persisted, current) => {
+        const state = persisted as PersistedShortcutsState
+        const stored = state?.shortcuts ?? {}
+        // Shortcuts added after this user last saved must still appear, so the
+        // defaults are the floor and the stored bindings win on top of them.
+        // `merge` runs on every rehydrate, unlike `migrate` which only runs
+        // when the version changes.
+        const shortcuts = { ...current.shortcuts }
+        for (const [action, shortcut] of Object.entries(stored)) {
+          if (shortcuts[action]) shortcuts[action] = shortcut
+        }
+        // `switchApiProfile` was replaced by previous/nextApiProfile; drop it
+        // so a stale binding cannot be recorded, nor linger in localStorage
+        delete (shortcuts as Record<string, unknown>).switchApiProfile
+        return { ...current, shortcuts }
       }
     }
   )

@@ -10,6 +10,7 @@ import {
 } from './toolbar-window'
 import { takeScreenshot } from './take-screenshot'
 import { saveScreenshotToDisk } from './save-screenshot'
+import { handleGeneratedCode } from './save-code'
 import { getSolutionStream, getFollowUpStream, getGeneralStream } from './ai'
 import { state } from './state'
 import { settings } from './settings'
@@ -356,6 +357,8 @@ const callbacks: Record<string, () => void> = {
               role: 'assistant',
               content: assistantResponse
             })
+            // 答案已经写完，才处理代码（中途停止或报错不会走到这里）
+            handleGeneratedCode(assistantResponse)
           }
           mainWindow.webContents.send('solution-complete')
         }
@@ -482,6 +485,8 @@ const callbacks: Record<string, () => void> = {
               role: 'assistant',
               content: assistantResponse
             })
+            // 答案已经写完，才处理代码（中途停止或报错不会走到这里）
+            handleGeneratedCode(assistantResponse)
           }
           mainWindow.webContents.send('solution-complete')
         }
@@ -512,6 +517,22 @@ const callbacks: Record<string, () => void> = {
   // Stop current AI solution stream
   stopSolutionStream: () => {
     abortCurrentStream('user')
+  },
+
+  /**
+   * Ask the renderer to step through the saved AI profiles. The list lives in
+   * the renderer store (persisted there), so main only relays the direction.
+   */
+  nextApiProfile: () => {
+    const mainWindow = global.mainWindow
+    if (!mainWindow || mainWindow.isDestroyed() || !state.inCoderPage) return
+    mainWindow.webContents.send('switch-api-profile', 1)
+  },
+
+  previousApiProfile: () => {
+    const mainWindow = global.mainWindow
+    if (!mainWindow || mainWindow.isDestroyed() || !state.inCoderPage) return
+    mainWindow.webContents.send('switch-api-profile', -1)
   },
 
   ignoreOrEnableMouse: () => {
@@ -766,6 +787,8 @@ ipcMain.handle('sendFollowUpQuestion', async (_event, question: string) => {
           role: 'assistant',
           content: assistantResponse
         })
+        // 追问也可能给出完整解法，同样处理
+        handleGeneratedCode(assistantResponse)
       }
       mainWindow.webContents.send('solution-complete')
     }

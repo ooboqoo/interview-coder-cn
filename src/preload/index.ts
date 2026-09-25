@@ -86,6 +86,14 @@ const api = {
     ipcRenderer.removeAllListeners('adjust-opacity')
   },
 
+  // Shortcut asked to step through the saved AI profiles (+1 / -1)
+  onSwitchApiProfile: (callback: (direction: number) => void) => {
+    ipcRenderer.on('switch-api-profile', (_event, direction: number) => callback(direction))
+  },
+  removeSwitchApiProfileListener: () => {
+    ipcRenderer.removeAllListeners('switch-api-profile')
+  },
+
   // Listen for screenshot events
   onScreenshotTaken: (callback: (screenshotData: string) => void) => {
     ipcRenderer.on('screenshot-taken', (_event, screenshotData) => {
@@ -190,6 +198,8 @@ const api = {
 
   // Select screenshot save directory
   selectScreenshotDir: () => ipcRenderer.invoke('selectScreenshotDir') as Promise<string | null>,
+  // Select the directory the generated code is written to
+  selectCodeDir: () => ipcRenderer.invoke('selectCodeDir') as Promise<string | null>,
 
   // Transcription
   startTranscription: (apiKey: string) => ipcRenderer.invoke('start-transcription', apiKey),
