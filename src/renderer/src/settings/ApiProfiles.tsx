@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Check, Copy, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -25,7 +25,8 @@ import { useSettingsStore } from '@/lib/store/settings'
  * does not disturb the others.
  */
 export function ApiProfiles() {
-  const { apiProfiles, activeProfileId, setActiveProfile, addProfile } = useSettingsStore()
+  const { apiProfiles, activeProfileId, apiKey, apiBaseURL, setActiveProfile, addProfile } =
+    useSettingsStore()
   const [addOpen, setAddOpen] = useState(false)
   const [newName, setNewName] = useState('')
 
@@ -73,6 +74,8 @@ export function ApiProfiles() {
 
       <ProfileList />
 
+      <SaveStatus apiKey={apiKey} apiBaseURL={apiBaseURL} activeProfileId={activeProfileId} />
+
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
         <DialogContent>
           <DialogHeader>
@@ -102,6 +105,57 @@ export function ApiProfiles() {
         </DialogContent>
       </Dialog>
     </>
+  )
+}
+
+/**
+ * Edits are saved the moment they are typed, so there is no button to press.
+ * This reports that back instead: while a field is changing it reads 「保存中」,
+ * and once typing stops it confirms 「已保存」 for a moment. Without it the
+ * silence is indistinguishable from a failed save.
+ */
+function SaveStatus({
+  apiKey,
+  apiBaseURL,
+  activeProfileId
+}: {
+  apiKey: string
+  apiBaseURL: string
+  activeProfileId: string
+}) {
+  const [state, setState] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const firstRun = useRef(true)
+
+  useEffect(() => {
+    // Nothing has been edited yet, so there is nothing to report
+    if (firstRun.current) {
+      firstRun.current = false
+      return
+    }
+    setState('saving')
+    const saving = setTimeout(() => setState('saved'), 400)
+    // The confirmation is a reaction to an edit, not a permanent label
+    const done = setTimeout(() => setState('idle'), 2400)
+    return () => {
+      clearTimeout(saving)
+      clearTimeout(done)
+    }
+    // Switching profiles re-reads the fields and counts as a change too
+  }, [apiKey, apiBaseURL, activeProfileId])
+
+  if (state === 'idle') return null
+
+  return (
+    <div className="flex items-center gap-1 text-xs">
+      {state === 'saving' ? (
+        <span className="text-gray-400">保存中…</span>
+      ) : (
+        <span className="flex items-center gap-1 text-green-700">
+          <Check className="h-3.5 w-3.5" />
+          已保存
+        </span>
+      )}
+    </div>
   )
 }
 

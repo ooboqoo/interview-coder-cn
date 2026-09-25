@@ -174,6 +174,13 @@ interface SettingsStore extends Settings {
   cycleProfile: (step?: number) => ApiProfile | null
   /** Record that an API key has been saved, so the welcome dialog stays away */
   markApiConfigured: () => void
+  /**
+   * Change one of the live credential fields, keeping the active profile's
+   * own copy in step. Every settings-page input must go through this rather
+   * than `updateSetting`, otherwise the edit lives only in the flat fields and
+   * is lost the moment the user switches profiles or restarts.
+   */
+  updateCredential: (patch: Partial<Pick<ApiProfile, 'apiBaseURL' | 'apiKey' | 'model'>>) => void
   addCustomModel: (baseURL: string, model: string) => void
   removeCustomModel: (baseURL: string, model: string) => void
   /** Step the window opacity within [OPACITY_MIN, OPACITY_MAX] */
@@ -373,6 +380,18 @@ export const useSettingsStore = create<SettingsStore>()(
       markApiConfigured: () => {
         if (!get().hasConfiguredApi) set({ hasConfiguredApi: true })
       },
+      updateCredential: (patch) => {
+        set((state) => {
+          const configured =
+            state.hasConfiguredApi ||
+            (typeof patch.apiKey === 'string' && patch.apiKey.trim() !== '')
+          return {
+            ...patch,
+            hasConfiguredApi: configured,
+            apiProfiles: patchActiveProfile(state.apiProfiles, state.activeProfileId, patch)
+          }
+        })
+      },
       addCustomModel: (baseURL, model) => {
         set((state) => {
           const key = normalizeBaseURL(baseURL)
@@ -539,12 +558,26 @@ function reconcileApiProfiles(state: Settings): ApiProfile[] {
   // so an existing user is never met by the welcome dialog again
   state.hasConfiguredApi = state.hasConfiguredApi || hasAnyApiKey(profiles)
 
-  // The live fields are the source of truth for the active profile's own copy
-  return patchProfile(profiles, active.id, {
-    apiBaseURL: state.apiBaseURL,
-    apiKey: state.apiKey,
-    model: state.model
-  })
+  // The active profile owns the credentials and the flat fields are its mirror
+  // — the ones the main process reads to send requests and take screenshots.
+  // The profile wins, so the stored URL / key / model come back on restart.
+  const resolved = {
+    apiBaseURL: active.apiBaseURL || state.apiBaseURL,
+    apiKey: active.apiKey || state.apiKey,
+    model: active.model || state.model
+  }
+  state.apiBaseURL = resolved.apiBaseURL
+  state.apiKey = resolved.apiKey
+  state.model = resolved.model
+
+  // A profile saved before these fields existed adopts whatever the flat
+  // fields held, so an upgrade never silently blanks the user's credentials
+  const needsSeeding =
+    active.apiBaseURL !== resolved.apiBaseURL ||
+    active.apiKey !== resolved.apiKey ||
+    active.model !== resolved.model
+
+  return needsSeeding ? patchProfile(profiles, active.id, resolved) : profiles
 }
 
 /** Whether at least one profile has a usable API key */
