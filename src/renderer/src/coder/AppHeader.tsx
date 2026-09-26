@@ -6,12 +6,13 @@ import { useAppStore } from '@/lib/store/app'
 import { useSettingsStore } from '@/lib/store/settings'
 import { useSolutionStore } from '@/lib/store/solution'
 import { formatDuration } from '@/lib/utils/duration'
+import { useElapsed } from '@/lib/use-elapsed'
 
 export function AppHeader() {
   const navigate = useNavigate()
   const { ignoreMouse } = useAppStore()
   const model = useSettingsStore((state) => state.model)
-  const durationMs = useSolutionStore((state) => state.durationMs)
+  const elapsed = useElapsed()
   const setDurationMs = useSolutionStore((state) => state.setDurationMs)
   const [appVersion, setAppVersion] = useState('')
 
@@ -28,26 +29,34 @@ export function AppHeader() {
   }, [setDurationMs])
 
   return (
-    <div id="app-header" className="relative flex items-center">
-      <div className="mx-auto flex items-baseline gap-1.5">
-        <span>截屏解题助手</span>
-        {appVersion && <span className="text-[10px] opacity-60">v{appVersion}</span>}
-      </div>
-      {/* Left edge, mirroring the model name on the right; the title between
-          them stays centred only if neither side is laid out by the flow */}
-      {durationMs !== null && (
+    <div id="app-header" className="flex items-center gap-1">
+      {/*
+        Flex shrink decides what survives a narrow window. The higher the
+        factor, the sooner that item is squeezed, and it disappears once it
+        reaches `min-width: 0`:
+          title  flex: 1 8 auto  compressed first, being the least informative
+          model  flex: 0 4 auto  next; still reachable from the settings page
+          timer  shrink-0        never compressed — it exists nowhere else
+      */}
+      {elapsed !== null && (
         <span
-          className="absolute left-2 max-w-24 truncate text-[10px] opacity-60 pointer-events-none"
-          title={`本次耗时 ${formatDuration(durationMs)}`}
+          className="shrink-0 whitespace-nowrap pl-2 text-xs tabular-nums opacity-70 pointer-events-none"
+          title={`本次耗时 ${formatDuration(elapsed)}`}
         >
-          {formatDuration(durationMs)}
+          {formatDuration(elapsed)}
         </span>
       )}
-      {/* Pinned to the right edge so the title above stays centred; the model
-          name is long and would otherwise push the title off-centre */}
+      <div
+        className="flex min-w-0 items-baseline justify-center gap-1.5 px-2"
+        style={{ flex: '1 8 auto', minWidth: 0 }}
+      >
+        <span className="truncate">截屏解题助手</span>
+        {appVersion && <span className="shrink-0 text-[10px] opacity-60">v{appVersion}</span>}
+      </div>
       {model && (
         <span
-          className="absolute right-28 max-w-40 truncate text-[10px] opacity-60 pointer-events-none"
+          className="min-w-0 truncate pr-2 text-[10px] opacity-60 pointer-events-none"
+          style={{ flex: '0 4 auto', minWidth: 0 }}
           title={model}
         >
           {model}
