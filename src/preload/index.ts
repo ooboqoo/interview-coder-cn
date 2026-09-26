@@ -49,6 +49,10 @@ const api = {
     action:
       | 'takeScreenshot'
       | 'appendScreenshot'
+      | 'takeRegionScreenshot'
+      | 'sendDraftScreenshots'
+      | 'deleteLastDraftScreenshot'
+      | 'clearDraftScreenshots'
       | 'stopSolutionStream'
       | 'ignoreOrEnableMouse'
       | 'increaseOpacity'
@@ -63,6 +67,8 @@ const api = {
       | 'clearTranscription'
   ) => ipcRenderer.invoke('triggerAction', action),
   setToolbarVisible: (visible: boolean) => ipcRenderer.invoke('setToolbarVisible', visible),
+  reportRegionSelectionClick: () => ipcRenderer.invoke('region-selection-click'),
+  cancelRegionSelection: () => ipcRenderer.invoke('region-selection-cancel'),
 
   // Settings the toolbar window needs, pushed from main (its own store is a separate copy)
   onSyncToolbarSettings: (
@@ -95,6 +101,13 @@ const api = {
   // Remove screenshot listener
   removeScreenshotListener: () => {
     ipcRenderer.removeAllListeners('screenshot-taken')
+  },
+  onDraftScreenshotsUpdated: (callback: (drafts: string[]) => void) => {
+    ipcRenderer.on('draft-screenshots-updated', (_event, drafts) => callback(drafts))
+  },
+  getDraftScreenshots: () => ipcRenderer.invoke('getDraftScreenshots') as Promise<string[]>,
+  removeDraftScreenshotsUpdatedListener: () => {
+    ipcRenderer.removeAllListeners('draft-screenshots-updated')
   },
 
   // Listen for solution chunks
@@ -136,6 +149,14 @@ const api = {
   },
   removeSolutionErrorListener: () => {
     ipcRenderer.removeAllListeners('solution-error')
+  },
+  onOperationError: (callback: (message: string) => void) => {
+    ipcRenderer.on('operation-error', (_event, message) => {
+      callback(message)
+    })
+  },
+  removeOperationErrorListener: () => {
+    ipcRenderer.removeAllListeners('operation-error')
   },
 
   // Listen for scroll page up

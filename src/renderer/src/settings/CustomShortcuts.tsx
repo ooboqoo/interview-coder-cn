@@ -88,8 +88,28 @@ export function CustomShortcuts() {
           />
           <Shortcut
             label="追加截图"
-            description="在当前对话中追加截图并生成解题建议，适用于长题目等场景"
+            description="追加截图到待发送队列，不会立即请求AI"
             shortcut="appendScreenshot"
+          />
+          <Shortcut
+            label="区域截图"
+            description="依次点击左上角与右下角，截图进入待发送队列"
+            shortcut="takeRegionScreenshot"
+          />
+          <Shortcut
+            label="发送待发送截图"
+            description="将队列中的全部截图作为一次请求发送"
+            shortcut="sendDraftScreenshots"
+          />
+          <Shortcut
+            label="删除上一张待发送截图"
+            description="只删除最新的未发送截图，不影响已发送内容"
+            shortcut="deleteLastDraftScreenshot"
+          />
+          <Shortcut
+            label="清空待发送截图"
+            description="只清空未发送截图，不影响已发送内容与回答"
+            shortcut="clearDraftScreenshots"
           />
           <Shortcut
             label="停止生成"

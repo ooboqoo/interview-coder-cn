@@ -66,6 +66,26 @@ const defaultShortcuts: Record<string, Omit<Shortcut, 'defaultKey'>> = {
     key: `${platformAlt}+Shift+Enter`,
     category: 'Screenshot & AI'
   },
+  takeRegionScreenshot: {
+    action: 'takeRegionScreenshot',
+    key: `${platformAlt}+Shift+R`,
+    category: 'Screenshot & AI'
+  },
+  sendDraftScreenshots: {
+    action: 'sendDraftScreenshots',
+    key: `${platformAlt}+Shift+S`,
+    category: 'Screenshot & AI'
+  },
+  deleteLastDraftScreenshot: {
+    action: 'deleteLastDraftScreenshot',
+    key: `${platformAlt}+Shift+Backspace`,
+    category: 'Screenshot & AI'
+  },
+  clearDraftScreenshots: {
+    action: 'clearDraftScreenshots',
+    key: `${platformAlt}+Shift+Delete`,
+    category: 'Screenshot & AI'
+  },
   stopSolutionStream: {
     action: 'stopSolutionStream',
     key: `${platformAlt}+.`,
@@ -138,7 +158,7 @@ export const useShortcutsStore = create<ShortcutsStore>()(
     }),
     {
       name: 'interview-coder-shortcuts',
-      version: 5,
+      version: 6,
       migrate: (state: unknown, version: number) => {
         if (!isPersistedShortcutsState(state) || !state.shortcuts) return state as ShortcutsStore
         // Merge in any new default shortcuts that are missing

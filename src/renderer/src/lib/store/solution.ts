@@ -4,6 +4,7 @@ interface SolutionState {
   isLoading: boolean
   solutionChunks: string[]
   screenshotData: string | null
+  draftScreenshots: string[]
   errorMessage: string | null
 }
 
@@ -12,6 +13,7 @@ interface SolutionStore extends SolutionState {
   addSolutionChunk: (chunk: string) => void
   setSolutionChunks: (chunks: string[]) => void
   setScreenshotData: (data: string | null) => void
+  setDraftScreenshots: (drafts: string[]) => void
   setErrorMessage: (message: string | null) => void
   clearSolution: () => void
   resetState: () => void
@@ -21,6 +23,7 @@ const defaultState: SolutionState = {
   isLoading: false,
   solutionChunks: [],
   screenshotData: null,
+  draftScreenshots: [],
   errorMessage: null
 }
 
@@ -39,6 +42,9 @@ export const useSolutionStore = create<SolutionStore>()((set) => ({
   },
   setScreenshotData: (data) => {
     set({ screenshotData: data })
+  },
+  setDraftScreenshots: (drafts) => {
+    set({ draftScreenshots: drafts })
   },
   setErrorMessage: (message) => {
     set({ errorMessage: message })

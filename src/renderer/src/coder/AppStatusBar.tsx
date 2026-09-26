@@ -13,7 +13,8 @@ export function AppStatusBar() {
     isLoading: isReceivingSolution,
     setIsLoading,
     screenshotData,
-    solutionChunks
+    solutionChunks,
+    draftScreenshots
   } = useSolutionStore()
   const { ignoreMouse } = useAppStore()
   const { shortcuts } = useShortcutsStore()
@@ -74,6 +75,12 @@ export function AppStatusBar() {
                 />
               </Button>
             </div>
+          </div>
+        ) : draftScreenshots.length > 0 ? (
+          <div className="flex items-center gap-2 text-sm opacity-70 pointer-events-none">
+            <ShortcutHint shortcut={shortcuts.sendDraftScreenshots.key} label="发送草稿" />
+            <ShortcutHint shortcut={shortcuts.deleteLastDraftScreenshot.key} label="撤回一张" />
+            <ShortcutHint shortcut={shortcuts.clearDraftScreenshots.key} label="清空草稿" />
           </div>
         ) : hasActiveConversation ? (
           <div className="flex items-center space-x-2 pointer-events-none opacity-50 text-sm gap-1">
@@ -157,5 +164,17 @@ export function AppStatusBar() {
         </DialogContent>
       </Dialog>
     </div>
+  )
+}
+
+function ShortcutHint({ shortcut, label }: { shortcut: string; label: string }) {
+  return (
+    <span>
+      <ShortcutRenderer
+        shortcut={shortcut}
+        className="inline-block scale-75 text-xs border border-current bg-transparent py-0 px-1"
+      />
+      {label}
+    </span>
   )
 }
