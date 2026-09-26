@@ -66,6 +66,9 @@ function composeCustomPrompt(scenes: PromptScene[], activeSceneId: string): stri
 /** How captured screenshots are shown on the main page, ordered by how much room they take */
 export type ScreenshotDisplay = 'none' | 'count' | 'gallery'
 
+/** What to do when a saved code file would collide with an existing one */
+export type CodeNamingMode = 'sequence' | 'overwrite'
+
 /** Immutably replace one profile, leaving the rest untouched */
 function patchProfile(
   profiles: ApiProfile[],
@@ -136,6 +139,10 @@ interface Settings {
   codeAutoSave: boolean
   /** 代码保存目录；为空时不保存 */
   codeSaveDir: string
+  /** 保存代码时的文件名（不含扩展名）；为空时用默认的 Test */
+  codeFileBaseName: string
+  /** 重名时：sequence 依次编号（Test1、Test2），overwrite 覆盖同一个文件 */
+  codeNamingMode: CodeNamingMode
   /** 把 AI 生成的代码自动复制到系统剪贴板 */
   codeCopyToClipboard: boolean
 
@@ -221,6 +228,8 @@ const defaultSettings: Settings = {
 
   codeAutoSave: false,
   codeSaveDir: '',
+  codeFileBaseName: 'Test',
+  codeNamingMode: 'sequence',
   codeCopyToClipboard: false,
 
   dashscopeApiKey: '',

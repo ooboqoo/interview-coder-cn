@@ -34,12 +34,14 @@ import {
   useSettingsStore,
   PRESET_SCENE_PROMPTS,
   type ScreenshotDisplay,
+  type CodeNamingMode,
   OPACITY_MIN,
   OPACITY_MAX,
   OPACITY_STEP
 } from '@/lib/store/settings'
 import type { Theme } from '@/lib/theme'
 import { isMac } from '@/lib/utils/env'
+import { useAppStore } from '@/lib/store/app'
 import { ModelField } from './ModelField'
 import { ApiProfiles } from './ApiProfiles'
 import { SelectBaseURL } from './SelectBaseURL'
@@ -70,6 +72,8 @@ export default function SettingsPage() {
     screenshotDir,
     codeAutoSave,
     codeSaveDir,
+    codeFileBaseName,
+    codeNamingMode,
     codeCopyToClipboard,
     dashscopeApiKey,
     audioInputDeviceId,
@@ -82,6 +86,7 @@ export default function SettingsPage() {
     addScene,
     removeScene
   } = useSettingsStore()
+  const { ignoreMouse, syncAppState } = useAppStore()
   const [showApiKey, setShowApiKey] = useState(false)
   const [showDashscopeApiKey, setShowDashscopeApiKey] = useState(false)
   const [addSceneOpen, setAddSceneOpen] = useState(false)
@@ -90,8 +95,31 @@ export default function SettingsPage() {
 
   const [audioDevices, setAudioDevices] = useState<MediaDeviceInfo[]>([])
 
+  // Mirrors save-code.ts: a blank or unusable name falls back to `Test`
+  const baseNamePreview = codeFileBaseName.trim() || 'Test'
+
   const activeScene = scenes.find((s) => s.id === activeSceneId)
   const deletingScene = scenes.find((s) => s.id === sceneToDelete)
+
+  /**
+   * Click-through is suspended while this page is up — the switch that turns
+   * it back off lives here, so letting it apply would swallow the very clicks
+   * needed to undo it. Main keeps the preference and applies it on the way out,
+   * so the switch below still reflects what the user chose.
+   */
+  useEffect(() => {
+    window.api.updateAppState({ inSettingsPage: true })
+    return () => {
+      window.api.updateAppState({ inSettingsPage: false })
+    }
+  }, [])
+
+  useEffect(() => {
+    window.api.onSyncAppState((state) => syncAppState(state))
+    return () => {
+      window.api.removeSyncAppStateListener()
+    }
+  }, [syncAppState])
 
   useEffect(() => {
     return () => {
@@ -531,6 +559,22 @@ export default function SettingsPage() {
 
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium">
+                鼠标穿透
+                <span className="ml-2 text-xs font-light">
+                  开启后鼠标点击会穿到窗口背后，可直接操作背后的编辑器；不需要悬浮工具条也能使用
+                </span>
+              </label>
+              <Switch
+                className="scale-y-90"
+                checked={ignoreMouse}
+                onCheckedChange={(checked) => {
+                  void window.api.setIgnoreMouse(checked)
+                }}
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium">
                 悬浮工具条
                 <span className="ml-2 text-xs font-light">
                   在主窗口上方显示一排按钮，可用鼠标点击替代快捷键操作，详见帮助中心
@@ -649,25 +693,68 @@ export default function SettingsPage() {
               />
             </div>
             {codeAutoSave && (
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-medium">
-                  保存目录
-                  <span className="ml-2 text-xs font-light">
-                    文件依次命名为 Test1.java、Test2.py
-                    等，重名自动往后排（选择弹窗可能被本窗口遮挡）
-                  </span>
-                </label>
-                <button
-                  className="text-xs text-gray-600 max-w-48 truncate hover:text-gray-900 cursor-pointer transition-colors"
-                  title="点击选择保存目录"
-                  onClick={async () => {
-                    const dir = await window.api.selectCodeDir()
-                    if (dir) updateSetting('codeSaveDir', dir)
-                  }}
-                >
-                  {codeSaveDir || '未选择目录（未选择时不会保存）'}
-                </button>
-              </div>
+              <>
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium">
+                    保存目录
+                    <span className="ml-2 text-xs font-light">
+                      可点击右侧内容重新选择保存目录（选择弹窗可能被本窗口遮挡）
+                    </span>
+                  </label>
+                  <button
+                    className="text-xs text-gray-600 max-w-48 truncate hover:text-gray-900 cursor-pointer transition-colors"
+                    title="点击选择保存目录"
+                    onClick={async () => {
+                      const dir = await window.api.selectCodeDir()
+                      if (dir) updateSetting('codeSaveDir', dir)
+                    }}
+                  >
+                    {codeSaveDir || '未选择目录（未选择时不会保存）'}
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium">
+                    文件名
+                    <span className="ml-2 text-xs font-light">
+                      不含扩展名，扩展名按代码语言自动添加；留空则用 Test
+                    </span>
+                  </label>
+                  <Input
+                    value={codeFileBaseName}
+                    onChange={(e) => updateSetting('codeFileBaseName', e.target.value)}
+                    placeholder="Test"
+                    className="h-9 w-60 bg-white"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium">
+                    重名时
+                    <span className="ml-2 text-xs font-light">
+                      {codeNamingMode === 'overwrite'
+                        ? '每次都写入同一个文件，会覆盖该目录下的同名文件'
+                        : '依次命名为 ' +
+                          baseNamePreview +
+                          '1.java、' +
+                          baseNamePreview +
+                          '2.java 等'}
+                    </span>
+                  </label>
+                  <Select
+                    value={codeNamingMode}
+                    onValueChange={(val) => updateSetting('codeNamingMode', val as CodeNamingMode)}
+                  >
+                    <SelectTrigger className="w-60 bg-white">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="sequence">依次编号（Test1、Test2）</SelectItem>
+                      <SelectItem value="overwrite">覆盖同一个文件（Test）</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
             )}
 
             <div className="flex items-center justify-between">

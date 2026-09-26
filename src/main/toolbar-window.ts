@@ -130,6 +130,15 @@ export function setToolbarWanted(wanted: boolean): void {
 }
 
 /**
+ * Send a message to the toolbar's own renderer. Its store is a separate copy
+ * of the main window's, so anything it displays has to be pushed explicitly.
+ */
+export function sendToToolbar(channel: string, payload: unknown): void {
+  if (!toolbarWindow || toolbarWindow.isDestroyed()) return
+  toolbarWindow.webContents.send(channel, payload)
+}
+
+/**
  * Keep the toolbar as translucent as the main window. The main window applies
  * opacity to its body via CSS; the toolbar is nothing but that bar, so the same
  * value is applied to the whole window.

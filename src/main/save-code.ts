@@ -4,12 +4,34 @@ import { join, basename } from 'node:path'
 import { settings } from './settings'
 
 /**
- * The base name shared by every saved code file; a sequence number is appended
- * to it (`Test1.java`, `Test2.java`, ...) so repeated saves never overwrite.
+ * Base name used when the user leaves the setting blank.
  */
-const BASE_NAME = 'Test'
+const DEFAULT_BASE_NAME = 'Test'
 /** Give up after this many collisions rather than scanning the folder forever */
 const MAX_SEQUENCE = 9999
+
+/**
+ * Turn whatever the user typed into a usable base name.
+ *
+ * Path separators are stripped rather than escaped: the name is joined onto a
+ * directory the user chose, so a `../` in it would write outside that folder.
+ * Characters Windows forbids are replaced rather than dropped, so `a:b` stays
+ * readable as `a_b` instead of becoming `ab`.
+ */
+export function sanitizeBaseName(raw: string): string {
+  // Control characters are exactly what a pasted name can contain and a file
+  // name must not, so matching them here is the point rather than a mistake
+  // eslint-disable-next-line no-control-regex
+  const CONTROL_CHARS = /[\u0000-\u001f]/g
+  const cleaned = raw
+    .replace(/[/\\]/g, '')
+    .replace(/[<>:"|?*]/g, '_')
+    .replace(CONTROL_CHARS, '_')
+    .replace(/^\.+/, '')
+    .trim()
+  // A name of only dots or separators would resolve to the folder itself
+  return cleaned || DEFAULT_BASE_NAME
+}
 
 /**
  * Fenced-code-block languages (` ```java `) and the extension each is saved as.
@@ -152,13 +174,18 @@ function resolveExtension(block: CodeBlock): string {
 }
 
 /**
- * Reserve the first free `Test<n><ext>` in `dir` and write `code` into it.
+ * Reserve the first free `<base><n><ext>` in `dir` and write `code` into it.
  * `open(..., 'wx')` fails if the path exists, which keeps two near-simultaneous
  * saves from picking the same name — the check and the create are one step.
  */
-async function writeWithUniqueName(dir: string, extension: string, code: string): Promise<string> {
+async function writeWithUniqueName(
+  dir: string,
+  baseName: string,
+  extension: string,
+  code: string
+): Promise<string> {
   for (let sequence = 1; sequence <= MAX_SEQUENCE; sequence++) {
-    const filePath = join(dir, `${BASE_NAME}${sequence}${extension}`)
+    const filePath = join(dir, `${baseName}${sequence}${extension}`)
     let handle
     try {
       handle = await open(filePath, 'wx')
@@ -174,6 +201,30 @@ async function writeWithUniqueName(dir: string, extension: string, code: string)
     return filePath
   }
   throw new Error(`No free file name left in ${dir}`)
+}
+
+/**
+ * Write to `<base><ext>`, replacing whatever was there.
+ *
+ * A plain `writeFile` rather than the exclusive create above: overwriting is
+ * the point here, so the file is opened for truncation instead. Note that this
+ * replaces any file of that name in the folder, not only ones this app wrote —
+ * the mode is an explicit opt-in for exactly that reason.
+ */
+async function writeOverwriting(
+  dir: string,
+  baseName: string,
+  extension: string,
+  code: string
+): Promise<string> {
+  const filePath = join(dir, `${baseName}${extension}`)
+  const handle = await open(filePath, 'w')
+  try {
+    await handle.writeFile(code, 'utf8')
+  } finally {
+    await handle.close()
+  }
+  return filePath
 }
 
 /**
@@ -216,7 +267,12 @@ export async function saveCodeToDisk(answer: string): Promise<void> {
   const dir = settings.codeSaveDir
   try {
     await mkdir(dir, { recursive: true })
-    const filePath = await writeWithUniqueName(dir, resolveExtension(block), block.code)
+    const baseName = sanitizeBaseName(settings.codeFileBaseName)
+    const extension = resolveExtension(block)
+    const filePath =
+      settings.codeNamingMode === 'overwrite'
+        ? await writeOverwriting(dir, baseName, extension, block.code)
+        : await writeWithUniqueName(dir, baseName, extension, block.code)
     console.log('Saved code to', filePath)
   } catch (error) {
     console.error('Failed to save code:', error)

@@ -6,13 +6,14 @@ import {
   showToolbar,
   hideToolbar,
   setToolbarWanted,
-  reassertToolbarTopMost
+  reassertToolbarTopMost,
+  sendToToolbar
 } from './toolbar-window'
 import { takeScreenshot } from './take-screenshot'
 import { saveScreenshotToDisk } from './save-screenshot'
 import { handleGeneratedCode } from './save-code'
 import { getSolutionStream, getFollowUpStream, getGeneralStream } from './ai'
-import { state } from './state'
+import { state, setPageChangeHandler } from './state'
 import { settings } from './settings'
 import { getTranscriptionText, clearTranscriptionText } from './transcription'
 
@@ -243,6 +244,51 @@ function abortCurrentStream(reason: AbortReason) {
   currentStreamContext.reason = reason
   currentStreamContext.controller.abort()
 }
+
+/**
+ * Hand the stored click-through state to the window.
+ *
+ * It stays off while the settings page is on screen even when the user asked
+ * for it: the switch that turns it back off lives on that page, so applying it
+ * there would swallow the clicks needed to undo it. The preference is kept, and
+ * takes effect the moment the user leaves the page.
+ */
+function applyIgnoreMouse(): void {
+  const mainWindow = global.mainWindow
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  mainWindow.setIgnoreMouseEvents(state.ignoreMouse && !state.inSettingsPage)
+}
+
+/** Tell both renderers what the window is actually doing */
+function broadcastAppState(): void {
+  const mainWindow = global.mainWindow
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('sync-app-state', state)
+  }
+  // The toolbar is a separate renderer with its own store, so it needs its own
+  // copy; without this its button keeps showing the state it last saw
+  sendToToolbar('sync-app-state', state)
+}
+
+/**
+ * Turn click-through on or off. Independent of the overlay toolbar: the
+ * toolbar is one way to operate the window, not a requirement, so hiding it
+ * leaves this working — the settings page and the shortcut can both drive it.
+ */
+export function setIgnoreMouse(ignore: boolean): void {
+  state.ignoreMouse = ignore
+  applyIgnoreMouse()
+  // Keep the toolbar visible if it is wanted, so its button stays reachable
+  showToolbar()
+  broadcastAppState()
+}
+
+// Leaving or entering the settings page changes whether the stored preference
+// may be applied, so re-run it on every page change
+setPageChangeHandler(() => {
+  applyIgnoreMouse()
+  broadcastAppState()
+})
 
 /**
  * When the current request started, or null when none is running.
@@ -576,12 +622,7 @@ const callbacks: Record<string, () => void> = {
   },
 
   ignoreOrEnableMouse: () => {
-    const mainWindow = global.mainWindow
-    if (!mainWindow || mainWindow.isDestroyed() || !state.inCoderPage) return
-    state.ignoreMouse = !state.ignoreMouse
-    mainWindow.setIgnoreMouseEvents(state.ignoreMouse)
-    showToolbar()
-    mainWindow.webContents.send('sync-app-state', state)
+    setIgnoreMouse(!state.ignoreMouse)
   },
 
   increaseOpacity: () => {
@@ -753,6 +794,15 @@ ipcMain.handle('triggerAction', (_event, action: string) => {
 
 ipcMain.handle('setToolbarVisible', (_event, visible: boolean) => {
   setToolbarWanted(visible)
+})
+
+/**
+ * Set click-through from the settings page. A plain `set` rather than the
+ * toolbar's toggle, so the switch always lands on the state the user picked.
+ */
+ipcMain.handle('setIgnoreMouse', (_event, ignore: boolean) => {
+  setIgnoreMouse(ignore)
+  return state.ignoreMouse
 })
 
 ipcMain.handle('sendFollowUpQuestion', async (_event, question: string) => {

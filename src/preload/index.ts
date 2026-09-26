@@ -63,6 +63,9 @@ const api = {
       | 'clearTranscription'
   ) => ipcRenderer.invoke('triggerAction', action),
   setToolbarVisible: (visible: boolean) => ipcRenderer.invoke('setToolbarVisible', visible),
+  // Set click-through from the settings page; returns the state main ended up in
+  setIgnoreMouse: (ignore: boolean) =>
+    ipcRenderer.invoke('setIgnoreMouse', ignore) as Promise<boolean>,
 
   // Settings the toolbar window needs, pushed from main (its own store is a separate copy)
   onSyncToolbarSettings: (

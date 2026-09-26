@@ -77,6 +77,10 @@ export const settings = {
   /** Save the code block of a finished answer as a source file */
   codeAutoSave: false,
   codeSaveDir: '',
+  /** Base file name for saved code; blank falls back to `Test` */
+  codeFileBaseName: 'Test',
+  /** `sequence` appends a number (Test1, Test2); `overwrite` reuses one name */
+  codeNamingMode: 'sequence' as 'sequence' | 'overwrite',
   /** Copy the code block of a finished answer to the system clipboard */
   codeCopyToClipboard: false,
   dashscopeApiKey: '',
