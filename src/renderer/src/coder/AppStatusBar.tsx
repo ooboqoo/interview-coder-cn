@@ -3,6 +3,7 @@ import { Pointer, PointerOff, OctagonX, MessageCircle } from 'lucide-react'
 import { useSolutionStore } from '@/lib/store/solution'
 import { useShortcutsStore } from '@/lib/store/shortcuts'
 import { useAppStore } from '@/lib/store/app'
+import { useSettingsStore } from '@/lib/store/settings'
 import ShortcutRenderer from '@/components/ShortcutRenderer'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogTitle, DialogContent, DialogFooter } from '@/components/ui/dialog'
@@ -17,6 +18,7 @@ export function AppStatusBar() {
   } = useSolutionStore()
   const { ignoreMouse } = useAppStore()
   const { shortcuts } = useShortcutsStore()
+  const hideShortcutHints = useSettingsStore((state) => state.hideShortcutHints)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [questionInput, setQuestionInput] = useState('')
 
@@ -75,7 +77,7 @@ export function AppStatusBar() {
               </Button>
             </div>
           </div>
-        ) : hasActiveConversation ? (
+        ) : hasActiveConversation && !hideShortcutHints ? (
           <div className="flex items-center space-x-2 pointer-events-none opacity-50 text-sm gap-1">
             <span>
               <ShortcutRenderer

@@ -6,12 +6,14 @@ import {
   showToolbar,
   hideToolbar,
   setToolbarWanted,
-  reassertToolbarTopMost
+  reassertToolbarTopMost,
+  sendToToolbar
 } from './toolbar-window'
 import { takeScreenshot } from './take-screenshot'
 import { saveScreenshotToDisk } from './save-screenshot'
+import { handleGeneratedCode } from './save-code'
 import { getSolutionStream, getFollowUpStream, getGeneralStream } from './ai'
-import { state } from './state'
+import { state, setPageChangeHandler } from './state'
 import { settings } from './settings'
 import { getTranscriptionText, clearTranscriptionText } from './transcription'
 
@@ -243,6 +245,78 @@ function abortCurrentStream(reason: AbortReason) {
   currentStreamContext.controller.abort()
 }
 
+/**
+ * Hand the stored click-through state to the window.
+ *
+ * It stays off while the settings page is on screen even when the user asked
+ * for it: the switch that turns it back off lives on that page, so applying it
+ * there would swallow the clicks needed to undo it. The preference is kept, and
+ * takes effect the moment the user leaves the page.
+ */
+function applyIgnoreMouse(): void {
+  const mainWindow = global.mainWindow
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  mainWindow.setIgnoreMouseEvents(state.ignoreMouse && !state.inSettingsPage)
+}
+
+/** Tell both renderers what the window is actually doing */
+function broadcastAppState(): void {
+  const mainWindow = global.mainWindow
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('sync-app-state', state)
+  }
+  // The toolbar is a separate renderer with its own store, so it needs its own
+  // copy; without this its button keeps showing the state it last saw
+  sendToToolbar('sync-app-state', state)
+}
+
+/**
+ * Turn click-through on or off. Independent of the overlay toolbar: the
+ * toolbar is one way to operate the window, not a requirement, so hiding it
+ * leaves this working — the settings page and the shortcut can both drive it.
+ */
+export function setIgnoreMouse(ignore: boolean): void {
+  state.ignoreMouse = ignore
+  applyIgnoreMouse()
+  // Keep the toolbar visible if it is wanted, so its button stays reachable
+  showToolbar()
+  broadcastAppState()
+}
+
+// Leaving or entering the settings page changes whether the stored preference
+// may be applied, so re-run it on every page change
+setPageChangeHandler(() => {
+  applyIgnoreMouse()
+  broadcastAppState()
+})
+
+/**
+ * When the current request started, or null when none is running.
+ *
+ * Timing is done here rather than in the renderer: the renderer's timers are
+ * throttled while the window is hidden or the display is asleep, which is
+ * exactly when this app is most likely to be waiting on a long answer.
+ */
+let requestStartedAt: number | null = null
+
+/** Start timing a request; called the moment the user presses the shortcut */
+function startTiming() {
+  requestStartedAt = Date.now()
+}
+
+/**
+ * Report how long the request took, in milliseconds. Called from every
+ * terminal path (finished, stopped, failed) so no outcome is left untimed.
+ */
+function reportDuration() {
+  if (requestStartedAt === null) return
+  const elapsed = Date.now() - requestStartedAt
+  requestStartedAt = null
+  const mainWindow = global.mainWindow
+  if (!mainWindow || mainWindow.isDestroyed()) return
+  mainWindow.webContents.send('solution-duration', elapsed)
+}
+
 const callbacks: Record<string, () => void> = {
   hideOrShowMainWindow: async () => {
     const mainWindow = global.mainWindow
@@ -277,6 +351,8 @@ const callbacks: Record<string, () => void> = {
     if (!mainWindow || mainWindow.isDestroyed() || !state.inCoderPage || !settings.apiKey) return
 
     abortCurrentStream('new-request')
+    // Timing covers the whole wait the user experiences: capture + request + render
+    startTiming()
     let loadingStarted = false
     const screenshotData = await takeScreenshot()
     if (screenshotData && mainWindow && !mainWindow.isDestroyed()) {
@@ -356,6 +432,8 @@ const callbacks: Record<string, () => void> = {
               role: 'assistant',
               content: assistantResponse
             })
+            // 答案已经写完，才处理代码（中途停止或报错不会走到这里）
+            handleGeneratedCode(assistantResponse)
           }
           mainWindow.webContents.send('solution-complete')
         }
@@ -376,6 +454,11 @@ const callbacks: Record<string, () => void> = {
         if (!streamStarted && streamContext.reason === 'user') {
           mainWindow.webContents.send('solution-stopped')
         }
+        // A stream aborted by a newer request must not report: the new request
+        // has already restarted the timer, and reporting here would cut it short
+        if (streamContext.reason !== 'new-request') {
+          reportDuration()
+        }
         if (loadingStarted && mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('ai-loading-end')
         }
@@ -395,6 +478,7 @@ const callbacks: Record<string, () => void> = {
     }
 
     abortCurrentStream('new-request')
+    startTiming()
     let loadingStarted = false
 
     const screenshotData = await takeScreenshot()
@@ -482,6 +566,8 @@ const callbacks: Record<string, () => void> = {
               role: 'assistant',
               content: assistantResponse
             })
+            // 答案已经写完，才处理代码（中途停止或报错不会走到这里）
+            handleGeneratedCode(assistantResponse)
           }
           mainWindow.webContents.send('solution-complete')
         }
@@ -502,6 +588,11 @@ const callbacks: Record<string, () => void> = {
         if (!streamStarted && streamContext.reason === 'user') {
           mainWindow.webContents.send('solution-stopped')
         }
+        // A stream aborted by a newer request must not report: the new request
+        // has already restarted the timer, and reporting here would cut it short
+        if (streamContext.reason !== 'new-request') {
+          reportDuration()
+        }
         if (loadingStarted && mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('ai-loading-end')
         }
@@ -514,13 +605,24 @@ const callbacks: Record<string, () => void> = {
     abortCurrentStream('user')
   },
 
-  ignoreOrEnableMouse: () => {
+  /**
+   * Ask the renderer to step through the saved AI profiles. The list lives in
+   * the renderer store (persisted there), so main only relays the direction.
+   */
+  nextApiProfile: () => {
     const mainWindow = global.mainWindow
     if (!mainWindow || mainWindow.isDestroyed() || !state.inCoderPage) return
-    state.ignoreMouse = !state.ignoreMouse
-    mainWindow.setIgnoreMouseEvents(state.ignoreMouse)
-    showToolbar()
-    mainWindow.webContents.send('sync-app-state', state)
+    mainWindow.webContents.send('switch-api-profile', 1)
+  },
+
+  previousApiProfile: () => {
+    const mainWindow = global.mainWindow
+    if (!mainWindow || mainWindow.isDestroyed() || !state.inCoderPage) return
+    mainWindow.webContents.send('switch-api-profile', -1)
+  },
+
+  ignoreOrEnableMouse: () => {
+    setIgnoreMouse(!state.ignoreMouse)
   },
 
   increaseOpacity: () => {
@@ -694,6 +796,15 @@ ipcMain.handle('setToolbarVisible', (_event, visible: boolean) => {
   setToolbarWanted(visible)
 })
 
+/**
+ * Set click-through from the settings page. A plain `set` rather than the
+ * toolbar's toggle, so the switch always lands on the state the user picked.
+ */
+ipcMain.handle('setIgnoreMouse', (_event, ignore: boolean) => {
+  setIgnoreMouse(ignore)
+  return state.ignoreMouse
+})
+
 ipcMain.handle('sendFollowUpQuestion', async (_event, question: string) => {
   const mainWindow = global.mainWindow
   if (!mainWindow || mainWindow.isDestroyed() || !state.inCoderPage || !settings.apiKey) {
@@ -706,6 +817,7 @@ ipcMain.handle('sendFollowUpQuestion', async (_event, question: string) => {
   }
 
   abortCurrentStream('new-request')
+  startTiming()
   const streamContext: StreamContext = {
     controller: new AbortController(),
     reason: null
@@ -766,6 +878,8 @@ ipcMain.handle('sendFollowUpQuestion', async (_event, question: string) => {
           role: 'assistant',
           content: assistantResponse
         })
+        // 追问也可能给出完整解法，同样处理
+        handleGeneratedCode(assistantResponse)
       }
       mainWindow.webContents.send('solution-complete')
     }
@@ -785,6 +899,11 @@ ipcMain.handle('sendFollowUpQuestion', async (_event, question: string) => {
     }
     if (!streamStarted && streamContext.reason === 'user') {
       mainWindow.webContents.send('solution-stopped')
+    }
+    // A stream aborted by a newer request must not report: the new request has
+    // already restarted the timer, and reporting here would cut it short
+    if (streamContext.reason !== 'new-request') {
+      reportDuration()
     }
   }
 

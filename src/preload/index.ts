@@ -63,6 +63,9 @@ const api = {
       | 'clearTranscription'
   ) => ipcRenderer.invoke('triggerAction', action),
   setToolbarVisible: (visible: boolean) => ipcRenderer.invoke('setToolbarVisible', visible),
+  // Set click-through from the settings page; returns the state main ended up in
+  setIgnoreMouse: (ignore: boolean) =>
+    ipcRenderer.invoke('setIgnoreMouse', ignore) as Promise<boolean>,
 
   // Settings the toolbar window needs, pushed from main (its own store is a separate copy)
   onSyncToolbarSettings: (
@@ -84,6 +87,22 @@ const api = {
   },
   removeAdjustOpacityListener: () => {
     ipcRenderer.removeAllListeners('adjust-opacity')
+  },
+
+  // Shortcut asked to step through the saved AI profiles (+1 / -1)
+  onSwitchApiProfile: (callback: (direction: number) => void) => {
+    ipcRenderer.on('switch-api-profile', (_event, direction: number) => callback(direction))
+  },
+  removeSwitchApiProfileListener: () => {
+    ipcRenderer.removeAllListeners('switch-api-profile')
+  },
+
+  // How long the finished request took, in milliseconds (measured in main)
+  onSolutionDuration: (callback: (ms: number) => void) => {
+    ipcRenderer.on('solution-duration', (_event, ms: number) => callback(ms))
+  },
+  removeSolutionDurationListener: () => {
+    ipcRenderer.removeAllListeners('solution-duration')
   },
 
   // Listen for screenshot events
@@ -190,6 +209,8 @@ const api = {
 
   // Select screenshot save directory
   selectScreenshotDir: () => ipcRenderer.invoke('selectScreenshotDir') as Promise<string | null>,
+  // Select the directory the generated code is written to
+  selectCodeDir: () => ipcRenderer.invoke('selectCodeDir') as Promise<string | null>,
 
   // Transcription
   startTranscription: (apiKey: string) => ipcRenderer.invoke('start-transcription', apiKey),

@@ -17,6 +17,9 @@
   -webkit-app-region: drag;
   .actions {
     -webkit-app-region: no-drag;
+    /* The window buttons must never be squeezed out by the title or the model
+       name; they are the only way to reach settings or close the window */
+    flex-shrink: 0;
     /* The buttons sit flush against the window edges, where the resize handles
        are; same z-index but later in the DOM, so clicks reach the buttons */
     position: relative;

@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { toast } from 'sonner'
 import { useSettingsStore } from '@/lib/store/settings'
 import { useAppStore } from '@/lib/store/app'
 import { useTranscriptionStore } from '@/lib/store/transcription'
@@ -31,6 +32,24 @@ export default function CoderPage() {
     })
     return () => {
       window.api.removeAdjustOpacityListener()
+    }
+  }, [])
+
+  useEffect(() => {
+    window.api.onSwitchApiProfile((direction) => {
+      const store = useSettingsStore.getState()
+      const profile = store.cycleProfile(direction)
+      if (!profile) {
+        toast('只有一个配置，无法切换')
+        return
+      }
+      toast(`已切换到「${profile.name}」`, {
+        description: profile.model || '未设置模型',
+        duration: 3000
+      })
+    })
+    return () => {
+      window.api.removeSwitchApiProfileListener()
     }
   }, [])
 

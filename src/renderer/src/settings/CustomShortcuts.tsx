@@ -97,6 +97,16 @@ export function CustomShortcuts() {
             shortcut="stopSolutionStream"
           />
           <Shortcut
+            label="上一个模型"
+            description="切换到上一个已保存的 AI 配置"
+            shortcut="previousApiProfile"
+          />
+          <Shortcut
+            label="下一个模型"
+            description="切换到下一个已保存的 AI 配置"
+            shortcut="nextApiProfile"
+          />
+          <Shortcut
             label="语音转录"
             description="开始/暂停实时语音转录"
             shortcut="toggleTranscription"
