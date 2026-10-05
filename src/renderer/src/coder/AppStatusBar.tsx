@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Pointer, PointerOff, OctagonX, MessageCircle } from 'lucide-react'
 import { useSolutionStore } from '@/lib/store/solution'
 import { useShortcutsStore } from '@/lib/store/shortcuts'
@@ -8,6 +8,7 @@ import ShortcutRenderer from '@/components/ShortcutRenderer'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogTitle, DialogContent, DialogFooter } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
+import { isMac } from '@/lib/utils/env'
 
 export function AppStatusBar() {
   const {
@@ -21,6 +22,17 @@ export function AppStatusBar() {
   const hideShortcutHints = useSettingsStore((state) => state.hideShortcutHints)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [questionInput, setQuestionInput] = useState('')
+  const questionRef = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    window.api.onOpenFollowUp(() => {
+      const { isLoading, screenshotData, solutionChunks } = useSolutionStore.getState()
+      if (isLoading || !screenshotData || solutionChunks.length === 0) return
+      setIsDialogOpen(true)
+      questionRef.current?.focus()
+    })
+    return () => window.api.removeOpenFollowUpListener()
+  }, [])
 
   const handleStop = () => {
     setIsLoading(false)
@@ -110,6 +122,12 @@ export function AppStatusBar() {
           >
             <MessageCircle className="w-4 h-4 mr-1" />
             追问问题
+            {!hideShortcutHints && (
+              <ShortcutRenderer
+                shortcut={shortcuts.openFollowUp.key}
+                className="inline-block border bg-transparent py-0 px-1"
+              />
+            )}
           </Button>
         )}
         {/* Mouse Status Indicator */}
@@ -137,13 +155,14 @@ export function AppStatusBar() {
         <DialogContent>
           <div className="py-4">
             <Textarea
-              placeholder="请输入追问内容，按 Ctrl+Enter 提交..."
+              ref={questionRef}
+              placeholder={`请输入追问内容，按 ${isMac ? '⌘' : 'Ctrl'}+Enter 提交...`}
               value={questionInput}
               className="min-h-24"
               onChange={(e) => setQuestionInput(e.target.value)}
               autoFocus
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                if (!e.nativeEvent.isComposing && e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
                   e.preventDefault()
                   handleSubmitQuestion()
                 }

@@ -125,6 +125,13 @@ const api = {
     ipcRenderer.removeAllListeners('switch-mode')
   },
 
+  onOpenFollowUp: (callback: () => void) => {
+    ipcRenderer.on('open-follow-up', () => callback())
+  },
+  removeOpenFollowUpListener: () => {
+    ipcRenderer.removeAllListeners('open-follow-up')
+  },
+
   // A screenshot was refused because this profile's model takes no images
   onVisionUnsupported: (callback: (profileId: string) => void) => {
     ipcRenderer.on('vision-unsupported', (_event, profileId: string) => callback(profileId))
@@ -295,6 +302,11 @@ const api = {
   getConversationSnapshot: () =>
     ipcRenderer.invoke('conversation:get-snapshot') as Promise<ConversationSnapshot>,
   requestHint: () => ipcRenderer.invoke('conversation:request-hint'),
+  sendConversationFollowUp: (question: string) =>
+    ipcRenderer.invoke('conversation:follow-up', question) as Promise<{
+      success: boolean
+      error?: string
+    }>,
   stopHints: () => ipcRenderer.invoke('conversation:stop-hints'),
   clearConversation: () => ipcRenderer.invoke('conversation:clear'),
   onConversationUtterance: (callback: (utterance: Utterance) => void) => {

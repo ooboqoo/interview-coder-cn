@@ -28,7 +28,9 @@ export interface HintCard {
   /** The utterances this hint answers, inclusive */
   fromId: number
   toId: number
-  source: 'auto' | 'manual'
+  source: 'auto' | 'manual' | 'follow-up'
+  /** The user's typed question, for a follow-up card */
+  question?: string
   status: HintStatus
   text: string
   /** What the model reasoned before `text`; empty for non-thinking models */
