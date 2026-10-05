@@ -1,6 +1,7 @@
 import { ipcMain } from 'electron'
 import type { ModelMessage } from 'ai'
 import { getHintStream } from './ai'
+import { buildConversationFollowUpMessages } from '../shared/conversation-follow-up'
 import { settings, getModeProfile } from './settings'
 import { consumeStream, extractErrorMessage } from './stream'
 import { isTranscriptionRunning, onConversationSentence, onTranscriptionEnd } from './transcription'
@@ -192,7 +193,8 @@ async function startHint(
   fromId: number,
   toId: number,
   source: HintCard['source'],
-  previous?: string
+  previous?: string,
+  followUpMessages?: ModelMessage[]
 ): Promise<void> {
   stopStream(card.id)
   Object.assign(card, {
@@ -205,7 +207,7 @@ async function startHint(
     error: undefined,
     latencyMs: undefined
   } satisfies Partial<HintCard>)
-  hintedUpTo = Math.max(hintedUpTo, toId)
+  if (source !== 'follow-up') hintedUpTo = Math.max(hintedUpTo, toId)
   publishHint(card)
 
   if (!getModeProfile('conversation').apiKey) {
@@ -219,7 +221,7 @@ async function startHint(
   generations.set(card.id, generation)
   const stream: HintStream = { controller: new AbortController(), startedAt: Date.now() }
   streams.set(card.id, stream)
-  const messages = buildMessages(fromId, toId, previous)
+  const messages = followUpMessages ?? buildMessages(fromId, toId, previous)
   const outcome = await consumeStream(
     (signal) => getHintStream(messages, signal),
     stream.controller,
@@ -261,7 +263,10 @@ export function requestHint(): void {
   const latest = utterances.at(-1)
   const current = [...hints]
     .reverse()
-    .find((card) => card.status === 'streaming' || card.status === 'waiting')
+    .find(
+      (card) =>
+        card.source !== 'follow-up' && (card.status === 'streaming' || card.status === 'waiting')
+    )
 
   if (current) {
     const toId = Math.max(current.toId, latest?.id ?? 0)
@@ -274,12 +279,36 @@ export function requestHint(): void {
     void startHint(createCard(hintedUpTo + 1, latest.id), hintedUpTo + 1, latest.id, 'manual')
     return
   }
-  const last = hints.at(-1)
+  const last = hints.findLast((card) => card.source !== 'follow-up')
   if (last) {
     void startHint(last, last.fromId, last.toId, 'manual', last.text)
     return
   }
   send('conversation-notice', '还没有识别到对方说话')
+}
+
+/** Accept a typed question without consuming pending speech or replacing its hints. */
+export function requestConversationFollowUp(question: unknown): {
+  success: boolean
+  error?: string
+} {
+  if (typeof question !== 'string' || !question.trim()) {
+    return { success: false, error: '请输入追问内容' }
+  }
+  const text = question.trim()
+  if (text.length > 4000) return { success: false, error: '追问内容请控制在 4000 字以内' }
+  if (hints.some((card) => card.source === 'follow-up' && card.status === 'streaming')) {
+    return { success: false, error: '请等待当前追问完成，或先停止生成' }
+  }
+  if (!getModeProfile('conversation').apiKey) {
+    return { success: false, error: '请先到「设置 → AI 模型」填写对话模式的 API Key' }
+  }
+  const messages = buildConversationFollowUpMessages(utterances, hints, text)
+  const latest = hints.findLast((card) => card.source !== 'follow-up')
+  const card = createCard(latest?.fromId ?? 0, utterances.at(-1)?.id ?? 0)
+  card.question = text
+  void startHint(card, card.fromId, card.toId, 'follow-up', undefined, messages)
+  return { success: true }
 }
 
 /** Stop every hint being written, and give up on the withdrawn ones */
@@ -328,5 +357,8 @@ onTranscriptionEnd(() => {
 
 ipcMain.handle('conversation:get-snapshot', () => getSnapshot())
 ipcMain.handle('conversation:request-hint', () => requestHint())
+ipcMain.handle('conversation:follow-up', (_event, question: unknown) =>
+  requestConversationFollowUp(question)
+)
 ipcMain.handle('conversation:stop-hints', () => stopHints())
 ipcMain.handle('conversation:clear', () => clearConversation())

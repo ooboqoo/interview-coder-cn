@@ -42,6 +42,8 @@ export function createWindow(): void {
 
   // Store reference to mainWindow globally
   global.mainWindow = mainWindow
+  // Enable capture protection before the first show, including the inline follow-up input.
+  applyContentProtection(mainWindow)
   // The toolbar follows the main window's position and visibility on its own
   createToolbarWindow(mainWindow)
 

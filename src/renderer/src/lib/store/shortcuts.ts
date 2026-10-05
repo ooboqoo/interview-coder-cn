@@ -76,6 +76,11 @@ const defaultShortcuts: Record<string, Omit<Shortcut, 'defaultKey'>> = {
     key: `${platformAlt}+Shift+Enter`,
     category: 'Screenshot'
   },
+  openFollowUp: {
+    action: 'openFollowUp',
+    key: `${platformAlt}+Q`,
+    category: 'AI'
+  },
   pickCaptureRegion: {
     action: 'pickCaptureRegion',
     key: `${platformAlt}+Shift+R`,

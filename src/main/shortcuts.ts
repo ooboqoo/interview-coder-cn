@@ -1,4 +1,4 @@
-import { globalShortcut, ipcMain, screen } from 'electron'
+import { app, globalShortcut, ipcMain, screen } from 'electron'
 import type { BrowserWindow } from 'electron'
 import type { ModelMessage } from 'ai'
 import { applyContentProtection } from './main-window'
@@ -560,6 +560,27 @@ const callbacks: Record<string, () => void> = {
       },
       { showLoading: true }
     )
+  },
+
+  openFollowUp: () => {
+    const mainWindow = global.mainWindow
+    if (
+      !mainWindow ||
+      mainWindow.isDestroyed() ||
+      !inModePage() ||
+      (state.inCoderPage && (screenshotCount === 0 || currentStreamContext))
+    )
+      return
+
+    // Typing a follow-up explicitly requires focus, even when another app is active.
+    if (isWindowSoftHidden) restoreSoftHiddenWindow(mainWindow)
+    if (!mainWindow.isVisible()) showMainWindow(mainWindow)
+    // The input lives in this protected window; refresh protection even if it was already visible.
+    applyContentProtection(mainWindow)
+    if (process.platform === 'darwin') app.focus({ steal: true })
+    mainWindow.focus()
+    keepWindowInFront(mainWindow)
+    mainWindow.webContents.send('open-follow-up')
   },
 
   // Stop current AI solution stream, or 对话模式's hints

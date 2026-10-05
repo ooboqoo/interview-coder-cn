@@ -122,6 +122,11 @@ export function CustomShortcuts() {
         <div className="space-y-2">
           <h3 className="text-sm text-gray-500">两种模式通用（作用于当前模式）</h3>
           <Shortcut
+            label="追问问题"
+            description="聚焦当前模式的追问输入框；截图模式 Ctrl/⌘+Enter 提交，对话模式 Enter 提交"
+            shortcut="openFollowUp"
+          />
+          <Shortcut
             label="停止生成"
             description="打断正在生成的解题建议或提示"
             shortcut="stopSolutionStream"

@@ -11,6 +11,7 @@ import { useTranscriptionStore } from '@/lib/store/transcription'
 import { useConversationStore } from '@/lib/store/conversation'
 import type { HintCard } from '../../../shared/conversation'
 import { startListening } from './listening'
+import { FollowUpInput } from './FollowUpInput'
 
 export const HINT_PANEL_ID = 'hint-panel'
 
@@ -94,6 +95,7 @@ export function HintPanel() {
           ))
         )}
       </div>
+      <FollowUpInput />
     </section>
   )
 }
@@ -120,9 +122,18 @@ function HintCardView({ card, ref }: { card: HintCard; ref: (el: HTMLElement | n
       onMouseLeave={() => setFocusedHintId(null)}
     >
       <div className="mb-1 flex items-center gap-2 text-[11px] text-app-muted-fg select-none">
-        {question && <span className="min-w-0 truncate">「{question}」</span>}
+        {(card.question || question) && (
+          <span
+            className={cn(
+              'min-w-0',
+              card.question ? 'whitespace-pre-wrap break-words' : 'truncate'
+            )}
+          >
+            「{card.question || question}」
+          </span>
+        )}
         <span className="ml-auto shrink-0">
-          {card.source === 'auto' ? '自动' : '手动'}
+          {card.source === 'follow-up' ? '追问' : card.source === 'auto' ? '自动' : '手动'}
           {card.latencyMs !== undefined && ` · ${(card.latencyMs / 1000).toFixed(1)}s`}
           {card.status === 'stopped' && ' · 已停止'}
         </span>
@@ -196,6 +207,7 @@ function EmptyState() {
   return (
     <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center text-sm text-app-muted-fg select-none">
       {content}
+      <p>也可以在下方直接输入问题或追问</p>
     </div>
   )
 }
