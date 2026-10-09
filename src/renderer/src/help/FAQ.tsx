@@ -70,14 +70,14 @@ const faqs = [
     question: '分享屏幕时，对方能看到应用吗？',
     answer: (
       <span>
-        工具窗口在共享屏幕时自动隐藏(对方不可见)，但小部分会议软件可能需要配置才能隐藏。所以如果你对隐身功能有需求，务必在正式使用前用「当前电脑」+「当前会议软件」测试一下。更多细节请参考{' '}
+        工具窗口在共享屏幕时自动隐藏(对方不可见)，但小部分会议软件可能需要配置才能隐藏。所以如果你对隐身功能有需求，务必在正式使用前用「当前电脑」+「当前会议软件」测试一下。相关讨论见{' '}
         <a
-          href="https://github.com/ooboqoo/interview-coder-cn/wiki/隐身相关说明和技巧"
+          href="https://github.com/ooboqoo/interview-coder-cn/issues/21"
           target="_blank"
           rel="noreferrer"
           className="text-blue-600 hover:underline"
         >
-          GitHub Wiki
+          GitHub Issue #21
         </a>
         。
       </span>
