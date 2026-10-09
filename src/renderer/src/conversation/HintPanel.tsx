@@ -12,7 +12,8 @@ import { useConversationStore } from '@/lib/store/conversation'
 import type { HintCard } from '../../../shared/conversation'
 import { startListening } from './listening'
 
-export const HINT_PANEL_ID = 'hint-panel'
+/** What one page of scrolling keeps of the previous page, so the eye finds its place */
+const PAGE_OVERLAP = 120
 
 /** The prompts tell the model to answer this when nothing needs a reply */
 const NO_REPLY = '（无需回应）'
@@ -23,20 +24,56 @@ export function HintPanel() {
   const setErrorMessage = useConversationStore((state) => state.setErrorMessage)
   const transcriptHidden = useSettingsStore((state) => state.conversationTranscriptHidden)
   const updateSetting = useSettingsStore((state) => state.updateSetting)
+  const panelRef = useRef<HTMLDivElement>(null)
   const cardRefs = useRef(new Map<number, HTMLElement>())
-  const lastCount = useRef(hints.length)
+  // Zero on mount, so coming back to the page (from the settings, say) lands on the newest hint
+  const lastCount = useRef(0)
+  const lastStatuses = useRef(new Map<number, HintCard['status']>())
 
-  // A new hint scrolls into view from its first line; the stream then fills it
-  // in without dragging the view along, so reading from the top is not disturbed
+  // A new hint scrolls to the top of the panel; the stream then fills it in
+  // without dragging the view along, so reading from the top is not disturbed.
+  // One that ends up longer than the panel pages down once when it is done,
+  // so reading on needs no scrolling by hand - a mouse or a key press is easy
+  // to spot on a call
   useEffect(() => {
+    const previous = lastStatuses.current
+    lastStatuses.current = new Map(hints.map((card) => [card.id, card.status]))
+    const panel = panelRef.current
+    if (!panel) return
+
     if (hints.length > lastCount.current) {
       cardRefs.current.get(hints[hints.length - 1].id)?.scrollIntoView({
         block: 'start',
-        behavior: 'smooth'
+        // On mount: straight there, not a ride through the history
+        behavior: lastCount.current === 0 ? 'instant' : 'smooth'
       })
+    } else {
+      for (const card of hints) {
+        const el = cardRefs.current.get(card.id)
+        if (el && card.status === 'done' && previous.get(card.id) === 'streaming') {
+          revealRest(panel, el)
+        }
+      }
     }
     lastCount.current = hints.length
   }, [hints])
+
+  useEffect(() => {
+    const scroll = (direction: 1 | -1) => () => {
+      const panel = panelRef.current
+      if (!panel) return
+      panel.scrollTo({
+        top: panel.scrollTop + direction * pageStep(panel),
+        behavior: 'smooth'
+      })
+    }
+    window.api.onScrollPageUp(scroll(-1))
+    window.api.onScrollPageDown(scroll(1))
+    return () => {
+      window.api.removeScrollPageUpListener()
+      window.api.removeScrollPageDownListener()
+    }
+  }, [])
 
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -76,26 +113,54 @@ export function HintPanel() {
       )}
 
       <div
-        id={HINT_PANEL_ID}
+        ref={panelRef}
         className="panel-scroll min-h-0 flex-1 space-y-3 overflow-y-auto px-3 pb-4"
       >
         {hints.length === 0 ? (
           <EmptyState />
         ) : (
           hints.map((card) => (
-            <HintCardView
-              key={card.id}
-              card={card}
-              ref={(el) => {
-                if (el) cardRefs.current.set(card.id, el)
-                else cardRefs.current.delete(card.id)
-              }}
-            />
+            // The newest card keeps a full panel of room under it, else a short
+            // one could not scroll to the top: it would stop at the bottom edge
+            // with only its first line showing, and grow out of sight from there
+            <div key={card.id} className="last:min-h-full">
+              <HintCardView
+                card={card}
+                ref={(el) => {
+                  if (el) cardRefs.current.set(card.id, el)
+                  else cardRefs.current.delete(card.id)
+                }}
+              />
+            </div>
           ))
         )}
       </div>
     </section>
   )
+}
+
+/** How far the panel scrolls for one page, by the shortcut or after a long hint */
+function pageStep(panel: HTMLElement): number {
+  return Math.max(panel.clientHeight - PAGE_OVERLAP, panel.clientHeight / 2)
+}
+
+/**
+ * A finished hint that runs past the bottom of the panel: scroll down to its
+ * end, one page at most. Only while it still sits at the top where it was
+ * brought into view; anyone who scrolled since is reading somewhere else.
+ */
+function revealRest(panel: HTMLElement, card: HTMLElement) {
+  const view = panel.getBoundingClientRect()
+  const box = card.getBoundingClientRect()
+  const top = box.top - view.top
+  const hidden = box.bottom - view.bottom
+  // The card's scroll-mt-2 puts it 8px down, plus some slack for rounding
+  if (hidden <= 0 || top < -1 || top > 16) return
+  panel.scrollBy({
+    // The panel's pb-4 below the card's end
+    top: Math.min(hidden + 16, pageStep(panel)),
+    behavior: 'smooth'
+  })
 }
 
 function HintCardView({ card, ref }: { card: HintCard; ref: (el: HTMLElement | null) => void }) {

@@ -8,11 +8,9 @@ import { useModePage } from '@/lib/use-mode-page'
 import { AppHeader } from '@/coder/AppHeader'
 import { PrerequisitesChecker } from '@/coder/PrerequisitesChecker'
 import { TranscriptPanel } from './TranscriptPanel'
-import { HintPanel, HINT_PANEL_ID } from './HintPanel'
+import { HintPanel } from './HintPanel'
 import { ConversationStatusBar } from './ConversationStatusBar'
 import { toggleHintMode, toggleListening } from './listening'
-
-const SCROLL_OFFSET = 120
 
 /**
  * 对话模式: what the other side says on the left, the hints for it on the right.
@@ -108,23 +106,6 @@ function useConversationEvents() {
       window.api.removeToggleTranscriptionListener()
       window.api.removeTranscriptionErrorListener()
       window.api.removeTranscriptionStoppedListener()
-    }
-  }, [])
-
-  useEffect(() => {
-    const scroll = (direction: 1 | -1) => () => {
-      const panel = document.getElementById(HINT_PANEL_ID)
-      if (!panel) return
-      panel.scrollTo({
-        top: panel.scrollTop + direction * (panel.clientHeight - SCROLL_OFFSET),
-        behavior: 'smooth'
-      })
-    }
-    window.api.onScrollPageUp(scroll(-1))
-    window.api.onScrollPageDown(scroll(1))
-    return () => {
-      window.api.removeScrollPageUpListener()
-      window.api.removeScrollPageDownListener()
     }
   }, [])
 }
