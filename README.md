@@ -61,6 +61,8 @@
 - 截图模式要发截图给模型，需要**能识图的模型**，设置里会标出不能识图的模型
 - 对话模式只发文字，建议选一个**打开「关闭思考」的快模型**，出提示更快
 
+常用平台的地址和模型名怎么填，见 Wiki 的[对照表](https://github.com/ooboqoo/interview-coder-cn/wiki/AI%E6%A8%A1%E5%9E%8B%E9%85%8D%E7%BD%AE%E4%B8%8E%E8%B0%83%E7%94%A8%E5%A4%B1%E8%B4%A5#%E5%B8%B8%E7%94%A8%E5%B9%B3%E5%8F%B0%E7%9A%84%E5%A1%AB%E6%B3%95)。
+
 > 部分平台或网关除了 API Key 还要求额外的请求头（如 Azure 的 `api-key`、Cloudflare AI Gateway 的 `cf-aig-authorization`），可以在配置的「高级 → 自定义请求头」里每行填一个 `名称: 值`。
 
 ### 3. 开始使用
@@ -104,6 +106,17 @@
 | 鼠标穿透                  | `⌥ M`      | `Ctrl+M`           |
 
 所有快捷键都可以在「设置 → 快捷键」里修改，完整列表见应用内的「帮助中心」。
+
+## 遇到问题
+
+先看报错原文：截图模式在答案区顶部的「API 调用失败」下面，对话模式在提示卡片的「生成失败：……」里。常见问题按类别整理在 Wiki 里，每条都有原因和解决办法：
+
+- [AI 模型配置与调用失败](https://github.com/ooboqoo/interview-coder-cn/wiki/AI%E6%A8%A1%E5%9E%8B%E9%85%8D%E7%BD%AE%E4%B8%8E%E8%B0%83%E7%94%A8%E5%A4%B1%E8%B4%A5)：404、401、模型名不对、模型看不到截图、一直「正在生成」、中转站的 Key 用不了
+- [截图问题](https://github.com/ooboqoo/interview-coder-cn/wiki/%E6%88%AA%E5%9B%BE%E9%97%AE%E9%A2%98)：截错屏幕、只截题目区域、截图是黑的、截图没保存
+- [窗口与快捷键问题](https://github.com/ooboqoo/interview-coder-cn/wiki/%E7%AA%97%E5%8F%A3%E4%B8%8E%E5%BF%AB%E6%8D%B7%E9%94%AE%E9%97%AE%E9%A2%98)：网页全屏时透明度跳变、启动就崩溃、快捷键没反应
+- [语音与对话模式](https://github.com/ooboqoo/interview-coder-cn/wiki/%E8%AF%AD%E9%9F%B3%E4%B8%8E%E5%AF%B9%E8%AF%9D%E6%A8%A1%E5%BC%8F)：识别不到声音、转录后 AI 不回答、对话模式不出提示
+
+没找到答案再[提 Issue](https://github.com/ooboqoo/interview-coder-cn/issues/new)，请附上软件版本、操作系统、所用平台和模型，以及报错原文（API Key 记得打码）。
 
 ## v3 新变化
 

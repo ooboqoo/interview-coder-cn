@@ -56,7 +56,7 @@ export default function HelpPage() {
             >
               GitHub Wiki
             </a>{' '}
-            获取更多帮助信息（如隐身相关配置、API Key 申请等）。
+            获取更多帮助信息（如安装说明、AI 配置填法、报错排查等）。
           </p>
           <div className="bg-gray-700/10 rounded-lg p-4">
             <h3 className="font-semibold mb-2">主要功能：</h3>
@@ -120,8 +120,23 @@ export default function HelpPage() {
 
         {/* Contact Support */}
         <HelpSection Icon={MessageCircle} title="联系支持">
-          <p className="text-gray-700">如果您遇到问题或有建议，请通过以下方式联系我们：</p>
+          <p className="text-gray-700">如果您遇到问题或有建议，可以通过以下方式获得帮助：</p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            <div className="border border-gray-400 rounded-lg p-4">
+              <h3 className="font-semibold mb-2 ">常见问题排查</h3>
+              <p className="text-gray-700">
+                在{' '}
+                <a
+                  href="https://github.com/ooboqoo/interview-coder-cn/wiki"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-blue-600 hover:underline"
+                >
+                  GitHub Wiki
+                </a>{' '}
+                上按报错或现象查找原因和解决办法
+              </p>
+            </div>
             <div className="border border-gray-400 rounded-lg p-4">
               <h3 className="font-semibold mb-2 ">GitHub Issues</h3>
               <p className="text-gray-700">
