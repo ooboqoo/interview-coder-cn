@@ -324,8 +324,9 @@ Material the user wants the AI to draw on — a resume, prepared Q&A, notes — 
 ### Stream Abort Pattern
 
 - `StreamContext` with `AbortController` and `reason` (`'user'` | `'new-request'`)
-- New requests automatically abort previous streams
-- User can manually stop via shortcut or UI button
+- New requests automatically abort previous streams. Only one answer ever streams: `beginStream()` aborts the current one and tracks the new one, and is called after any awaited capture — a stream started during the capture would otherwise go untracked, unstoppable, and write into the same answer
+- A capture takes up to a second and Electron's `getSources` hands every concurrent call the same capture, so each screenshot request takes a `screenshotRequestId` and drops out after the capture unless it is still the newest
+- User can manually stop via shortcut or UI button (`stopAnswer()`), which also drops a screenshot still being captured
 - Abort reason determines which IPC event to send (`solution-stopped` for user, silent for new-request)
 
 ### Real-time Speech Transcription
@@ -344,6 +345,7 @@ Material the user wants the AI to draw on — a resume, prepared Q&A, notes — 
 - Global shortcuts registered via Electron's `globalShortcut` API
 - Renderer stores shortcut config in Zustand (persisted); sends to main on init
 - On Windows, `Alt`-based shortcuts also register `Ctrl+Alt` variant for compatibility
+- On Windows a held shortcut repeats at the keyboard's auto-repeat rate (Chromium registers it without `MOD_NOREPEAT`). `isKeyRepeat()` drops a press within 600ms of the previous one of the same action, so holding the keys fires once; only `REPEATABLE_ACTIONS` (move, page, opacity) keep repeating
 - Shortcut actions are string-keyed callbacks in `shortcuts.ts`
 - Default shortcuts use `platformAlt` (`Alt` on macOS, `CommandOrControl` on Windows)
 - New actions also need a label in `settings/CustomShortcuts.tsx` and a description in `help/Shortcuts.tsx`
