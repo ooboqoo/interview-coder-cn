@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { useSettingsStore } from '@/lib/store/settings'
 import { useTranscriptionStore } from '@/lib/store/transcription'
 import { useSolutionStore } from '@/lib/store/solution'
-import { startAudioCapture, stopAudioCapture } from '@/lib/audio-capture'
+import { describeCaptureError, startAudioCapture, stopAudioCapture } from '@/lib/audio-capture'
 import { useModePage } from '@/lib/use-mode-page'
 
 import { AppHeader } from './AppHeader'
@@ -48,7 +48,7 @@ export default function CoderPage() {
         } catch (err) {
           console.error('Failed to start transcription:', err)
           stopAudioCapture()
-          setErrorMessage('启动语音转录失败，请检查系统音频权限')
+          setErrorMessage(describeCaptureError('启动语音转录失败', err))
         }
       }
     }

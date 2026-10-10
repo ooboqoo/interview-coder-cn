@@ -2,7 +2,7 @@ import { toast } from 'sonner'
 import { useSettingsStore } from '@/lib/store/settings'
 import { useTranscriptionStore } from '@/lib/store/transcription'
 import { useConversationStore } from '@/lib/store/conversation'
-import { startAudioCapture, stopAudioCapture } from '@/lib/audio-capture'
+import { describeCaptureError, startAudioCapture, stopAudioCapture } from '@/lib/audio-capture'
 
 /**
  * Listening to the other side: the audio is captured here and recognised in
@@ -28,7 +28,7 @@ export async function startListening(): Promise<void> {
   } catch (err) {
     console.error('Failed to start listening:', err)
     stopAudioCapture()
-    setErrorMessage('启动语音识别失败，请检查系统音频权限')
+    setErrorMessage(describeCaptureError('启动语音识别失败', err))
   }
 }
 

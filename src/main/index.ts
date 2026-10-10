@@ -51,13 +51,29 @@ app.whenReady().then(() => {
   // show it again once the window mounts.
   applyDockVisibility(true)
 
-  // Auto-approve getDisplayMedia for system audio loopback capture
+  // Auto-approve getDisplayMedia for system audio loopback capture. A request
+  // left unanswered never settles, and listening would silently do nothing:
+  // getSources rejects on macOS without the screen recording permission
   session.defaultSession.setDisplayMediaRequestHandler((_request, callback) => {
-    desktopCapturer.getSources({ types: ['screen'] }).then((sources) => {
-      if (sources.length > 0) {
-        callback({ video: sources[0], audio: 'loopback' })
-      }
-    })
+    desktopCapturer
+      .getSources({ types: ['screen'] })
+      .catch((err) => {
+        console.error('Failed to get screen sources for system audio:', err)
+        return []
+      })
+      .then((sources) => {
+        if (sources.length > 0) {
+          callback({ video: sources[0], audio: 'loopback' })
+          return
+        }
+        // No video refuses the request (getDisplayMedia rejects with an
+        // AbortError), and Electron throws for it as well
+        try {
+          callback({})
+        } catch {
+          // refused, as intended
+        }
+      })
   })
 
   // Auto-approve microphone access so users can enumerate and select audio input devices

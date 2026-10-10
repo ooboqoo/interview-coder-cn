@@ -1,4 +1,5 @@
 import { useSettingsStore } from '@/lib/store/settings'
+import { isMac } from '@/lib/utils/env'
 
 let mediaStream: MediaStream | null = null
 let audioContext: AudioContext | null = null
@@ -66,6 +67,20 @@ export async function startAudioCapture(): Promise<void> {
   }
   source.connect(processor)
   processor.connect(audioContext.destination)
+}
+
+/**
+ * The message for a capture that failed to start. System audio is taken from a
+ * screen capture, so on macOS it needs 屏幕与系统音频录制, granted to this app
+ * and in effect only after a restart. The error itself is appended: in a
+ * packaged app it is the only clue a user's report can carry.
+ */
+export function describeCaptureError(failure: string, err: unknown): string {
+  const detail = err instanceof Error ? `${err.name}: ${err.message}` : String(err)
+  const hint = isMac
+    ? '：请在「系统设置 → 隐私与安全性 → 屏幕与系统音频录制」中允许本应用，然后完全退出（⌘Q）再重新打开'
+    : '，请检查系统音频权限'
+  return `${failure}${hint}（${detail}）`
 }
 
 export function stopAudioCapture(): void {
