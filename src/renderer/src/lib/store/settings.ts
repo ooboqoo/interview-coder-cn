@@ -303,6 +303,10 @@ interface Settings {
   conversationMinChars: number
   /** 对话模式: hide the transcript column to give the hints the whole window */
   conversationTranscriptHidden: boolean
+  /** 对话模式: 把每段对话自动保存为 Markdown 文件 */
+  conversationAutoSave: boolean
+  /** 对话记录保存目录；为空时用 文档/InterviewCoder */
+  conversationSaveDir: string
 }
 
 /** A model change made on the user's behalf when the API Base URL changed */
@@ -415,7 +419,9 @@ const defaultSettings: Settings = {
   conversationHintMode: 'auto',
   conversationSilenceMs: 800,
   conversationMinChars: 4,
-  conversationTranscriptHidden: false
+  conversationTranscriptHidden: false,
+  conversationAutoSave: false,
+  conversationSaveDir: ''
 }
 
 export const useSettingsStore = create<SettingsStore>()(

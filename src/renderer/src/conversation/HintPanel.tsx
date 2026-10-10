@@ -9,14 +9,11 @@ import { useSettingsStore } from '@/lib/store/settings'
 import { useShortcutsStore } from '@/lib/store/shortcuts'
 import { useTranscriptionStore } from '@/lib/store/transcription'
 import { useConversationStore } from '@/lib/store/conversation'
-import type { HintCard } from '../../../shared/conversation'
+import { NO_REPLY, type HintCard } from '../../../shared/conversation'
 import { startListening } from './listening'
 
 /** What one page of scrolling keeps of the previous page, so the eye finds its place */
 const PAGE_OVERLAP = 120
-
-/** The prompts tell the model to answer this when nothing needs a reply */
-const NO_REPLY = '（无需回应）'
 
 export function HintPanel() {
   const hints = useConversationStore((state) => state.hints)

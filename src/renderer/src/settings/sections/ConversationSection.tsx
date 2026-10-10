@@ -1,4 +1,4 @@
-import { Lightbulb, MessagesSquare, TriangleAlert } from 'lucide-react'
+import { FileText, Lightbulb, MessagesSquare, TriangleAlert } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import {
   Select,
@@ -11,7 +11,7 @@ import { useSettingsStore, type HintMode } from '@/lib/store/settings'
 import { KnowledgeField } from '../KnowledgeField'
 import { ModeProfileSelect } from '../ModeProfileSelect'
 import { SceneEditor } from '../SceneEditor'
-import { Advanced, Field, SettingsCard } from '../components'
+import { Advanced, Field, SaveDirField, SettingsCard } from '../components'
 
 /** Silence that ends a sentence; the recogniser's own default is 1300ms */
 const SILENCE_OPTIONS = [
@@ -38,6 +38,8 @@ export function ConversationSection({
     conversationSilenceMs,
     conversationMinChars,
     conversationTranscriptHidden,
+    conversationAutoSave,
+    conversationSaveDir,
     updateSetting
   } = useSettingsStore()
 
@@ -138,6 +140,29 @@ export function ConversationSection({
               </Select>
             </Field>
           </Advanced>
+        </div>
+      </SettingsCard>
+
+      <SettingsCard Icon={FileText} title="对话记录保存到本地">
+        <div className="space-y-4">
+          <Field
+            label="保存对话记录到本地"
+            note="开启后，对方说的话和 AI 提示会自动保存为 Markdown 文件，一段对话一个文件，清空对话后另起一个"
+          >
+            <Switch
+              className="scale-y-90"
+              checked={conversationAutoSave}
+              onCheckedChange={(checked) => updateSetting('conversationAutoSave', checked)}
+            />
+          </Field>
+          {conversationAutoSave && (
+            <SaveDirField
+              dir={conversationSaveDir}
+              placeholder="默认: 文档/InterviewCoder"
+              pick={window.api.selectConversationDir}
+              onChange={(dir) => updateSetting('conversationSaveDir', dir)}
+            />
+          )}
         </div>
       </SettingsCard>
     </>

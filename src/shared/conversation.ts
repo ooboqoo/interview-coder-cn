@@ -45,6 +45,9 @@ export interface ConversationSnapshot {
   listening: boolean
 }
 
+/** The preset prompts tell the model to answer this when nothing needs a reply */
+export const NO_REPLY = '（无需回应）'
+
 /** Characters that carry meaning: punctuation and spaces do not count towards the minimum */
 export function countMeaningfulChars(text: string): number {
   return text.replace(/[\s\p{P}\p{S}]/gu, '').length

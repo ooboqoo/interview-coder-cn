@@ -12,8 +12,18 @@ ipcMain.handle('getAppSettings', () => {
   return settings
 })
 
+type SettingsListener = (previous: AppSettings) => void
+const settingsListeners: SettingsListener[] = []
+
+/** Run `listener` after every update from the renderer, with the settings as they were before it */
+export function onSettingsChanged(listener: SettingsListener): void {
+  settingsListeners.push(listener)
+}
+
 ipcMain.handle('updateAppSettings', (_event, _settings) => {
+  const previous = { ...settings }
   Object.assign(settings, _settings)
+  for (const listener of settingsListeners) listener(previous)
   if ('hideDockIcon' in _settings) {
     applyDockVisibility(settings.hideDockIcon)
   }
@@ -38,27 +48,21 @@ export function applyDockVisibility(hidden: boolean): void {
   }
 }
 
-ipcMain.handle('selectScreenshotDir', async () => {
+/** Ask for a folder; null if the user cancels */
+async function pickDirectory(title: string): Promise<string | null> {
   const result = await dialog.showOpenDialog({
     properties: ['openDirectory', 'createDirectory'],
-    title: '选择截图保存目录'
+    title
   })
   if (result.canceled || result.filePaths.length === 0) {
     return null
   }
   return result.filePaths[0]
-})
+}
 
-ipcMain.handle('selectCodeDir', async () => {
-  const result = await dialog.showOpenDialog({
-    properties: ['openDirectory', 'createDirectory'],
-    title: '选择代码保存目录'
-  })
-  if (result.canceled || result.filePaths.length === 0) {
-    return null
-  }
-  return result.filePaths[0]
-})
+ipcMain.handle('selectScreenshotDir', () => pickDirectory('选择截图保存目录'))
+ipcMain.handle('selectCodeDir', () => pickDirectory('选择代码保存目录'))
+ipcMain.handle('selectConversationDir', () => pickDirectory('选择对话记录保存目录'))
 
 export const settings = {
   /** Window colour scheme, kept in sync with the renderer; see renderer lib/theme.ts */
@@ -88,6 +92,10 @@ export const settings = {
   conversationSilenceMs: 800,
   /** 对话模式: a finished sentence shorter than this triggers no automatic hint */
   conversationMinChars: 4,
+  /** 对话模式: keep each conversation as a Markdown file, see save-conversation.ts */
+  conversationAutoSave: false,
+  /** Where the conversations go; blank means Documents/InterviewCoder */
+  conversationSaveDir: '',
   /** Kept in sync with the renderer so the overlay toolbar can match the main window */
   opacity: 0.8,
   /**

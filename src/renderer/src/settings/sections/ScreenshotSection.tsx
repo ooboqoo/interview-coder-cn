@@ -13,7 +13,7 @@ import { CaptureTargetFields } from '../CaptureTargetFields'
 import { KnowledgeField } from '../KnowledgeField'
 import { ModeProfileSelect } from '../ModeProfileSelect'
 import { SceneEditor } from '../SceneEditor'
-import { Field, SettingsCard } from '../components'
+import { Field, SaveDirField, SettingsCard } from '../components'
 
 export function ScreenshotSection({
   onEditProfile,
@@ -78,21 +78,12 @@ export function ScreenshotSection({
             />
           </Field>
           {screenshotAutoSave && (
-            <Field
-              label="保存目录"
-              note="可点击右侧内容重新选择保存目录（选择弹窗可能被本窗口遮挡）"
-            >
-              <button
-                className="text-xs text-gray-600 max-w-48 truncate hover:text-gray-900 cursor-pointer transition-colors"
-                title="点击选择保存目录"
-                onClick={async () => {
-                  const dir = await window.api.selectScreenshotDir()
-                  if (dir) updateSetting('screenshotDir', dir)
-                }}
-              >
-                {screenshotDir || '默认: 图片/InterviewCoder'}
-              </button>
-            </Field>
+            <SaveDirField
+              dir={screenshotDir}
+              placeholder="默认: 图片/InterviewCoder"
+              pick={window.api.selectScreenshotDir}
+              onChange={(dir) => updateSetting('screenshotDir', dir)}
+            />
           )}
         </div>
       </SettingsCard>
@@ -108,21 +99,12 @@ export function ScreenshotSection({
           </Field>
           {codeAutoSave && (
             <>
-              <Field
-                label="保存目录"
-                note="可点击右侧内容重新选择保存目录（选择弹窗可能被本窗口遮挡）"
-              >
-                <button
-                  className="text-xs text-gray-600 max-w-48 truncate hover:text-gray-900 cursor-pointer transition-colors"
-                  title="点击选择保存目录"
-                  onClick={async () => {
-                    const dir = await window.api.selectCodeDir()
-                    if (dir) updateSetting('codeSaveDir', dir)
-                  }}
-                >
-                  {codeSaveDir || '未选择目录（未选择时不会保存）'}
-                </button>
-              </Field>
+              <SaveDirField
+                dir={codeSaveDir}
+                placeholder="未选择目录（未选择时不会保存）"
+                pick={window.api.selectCodeDir}
+                onChange={(dir) => updateSetting('codeSaveDir', dir)}
+              />
 
               <Field label="文件名" note="不含扩展名，扩展名按代码语言自动添加；留空则用 Test">
                 <Input

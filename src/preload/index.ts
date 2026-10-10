@@ -290,6 +290,9 @@ const api = {
   selectScreenshotDir: () => ipcRenderer.invoke('selectScreenshotDir') as Promise<string | null>,
   // Select the directory the generated code is written to
   selectCodeDir: () => ipcRenderer.invoke('selectCodeDir') as Promise<string | null>,
+  // Select the directory 对话模式's conversations are saved to
+  selectConversationDir: () =>
+    ipcRenderer.invoke('selectConversationDir') as Promise<string | null>,
 
   // 对话模式: main owns the conversation, the page takes a snapshot and follows the events
   getConversationSnapshot: () =>

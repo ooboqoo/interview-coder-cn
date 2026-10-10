@@ -1,7 +1,8 @@
-import { ipcMain } from 'electron'
+import { app, ipcMain } from 'electron'
 import type { ModelMessage } from 'ai'
 import { getHintStream } from './ai'
-import { settings, getModeProfile } from './settings'
+import { settings, getModeProfile, onSettingsChanged } from './settings'
+import { saveConversation, saveConversationSync } from './save-conversation'
 import { consumeStream, extractErrorMessage } from './stream'
 import { isTranscriptionRunning, onConversationSentence, onTranscriptionEnd } from './transcription'
 import {
@@ -31,12 +32,20 @@ import {
 const CONTEXT_UTTERANCES = 20
 const CONTEXT_CHARS = 1500
 
+/** How long changes gather before the record on disk is rewritten */
+const SAVE_DELAY = 1500
+
 let utterances: Utterance[] = []
 let hints: HintCard[] = []
 let nextUtteranceId = 1
 let nextHintId = 1
 /** The last utterance some hint has covered; later ones are still unanswered */
 let hintedUpTo = 0
+/** When the first sentence was heard; the saved record is named after it */
+let startedAt = 0
+let saveTimer: NodeJS.Timeout | null = null
+/** The last save failed and the user was told; not again until one succeeds */
+let saveFailed = false
 
 interface HintStream {
   controller: AbortController
@@ -60,8 +69,40 @@ function send(channel: string, ...args: unknown[]) {
   }
 }
 
-const publishUtterance = (utterance: Utterance) => send('conversation-utterance', { ...utterance })
-const publishHint = (card: HintCard) => send('conversation-hint', { ...card })
+function publishUtterance(utterance: Utterance) {
+  send('conversation-utterance', { ...utterance })
+  scheduleSave()
+}
+
+function publishHint(card: HintCard) {
+  send('conversation-hint', { ...card })
+  scheduleSave()
+}
+
+/**
+ * Rewrite the record on disk shortly. Changes come in bursts (a sentence is
+ * revised word by word), and one write covers them all.
+ */
+function scheduleSave() {
+  if (saveTimer || !settings.conversationAutoSave) return
+  saveTimer = setTimeout(saveNow, SAVE_DELAY)
+}
+
+function saveNow() {
+  if (saveTimer) clearTimeout(saveTimer)
+  saveTimer = null
+  if (!settings.conversationAutoSave) return
+  saveConversation({ startedAt, utterances, hints }).then(
+    () => {
+      saveFailed = false
+    },
+    (error) => {
+      console.error('Failed to save the conversation:', error)
+      if (!saveFailed) send('conversation-notice', '对话记录保存失败，请检查设置里的保存目录')
+      saveFailed = true
+    }
+  )
+}
 
 function minChars(): number {
   return settings.conversationMinChars || 1
@@ -90,6 +131,7 @@ function handleSentence(text: string, final: boolean) {
     if (!text.trim()) return
     utterance = { id: nextUtteranceId++, text, final }
     utterances.push(utterance)
+    startedAt ||= Date.now()
   } else {
     utterance.text = text
     utterance.final = final
@@ -98,6 +140,7 @@ function handleSentence(text: string, final: boolean) {
   if (final && !utterance.text.trim()) {
     utterances.pop()
     send('conversation-utterance-removed', utterance.id)
+    scheduleSave()
     // What withdrew a hint came to nothing: write it for what it had
     const waiting = waitingCard()
     if (waiting) void startHint(waiting, waiting.fromId, waiting.toId, 'auto')
@@ -298,11 +341,14 @@ export function stopHints(): void {
 
 export function clearConversation(): void {
   for (const id of [...streams.keys()]) stopStream(id)
+  // The last changes still go into this conversation's file; the next one gets its own
+  if (saveTimer) saveNow()
   utterances = []
   hints = []
   nextUtteranceId = 1
   nextHintId = 1
   hintedUpTo = 0
+  startedAt = 0
   send('conversation-cleared')
 }
 
@@ -324,6 +370,26 @@ onTranscriptionEnd(() => {
   publishUtterance(open)
   const waiting = waitingCard()
   if (waiting) void startHint(waiting, waiting.fromId, open.id, 'auto')
+})
+
+// Turned on (or pointed at another folder) mid-conversation: save what is there already
+onSettingsChanged((previous) => {
+  if (!settings.conversationAutoSave) return
+  if (
+    previous.conversationAutoSave &&
+    previous.conversationSaveDir === settings.conversationSaveDir
+  ) {
+    return
+  }
+  scheduleSave()
+})
+
+// A change still waiting for its save would go down with the process
+app.on('will-quit', () => {
+  if (!saveTimer) return
+  clearTimeout(saveTimer)
+  saveTimer = null
+  if (settings.conversationAutoSave) saveConversationSync({ startedAt, utterances, hints })
 })
 
 ipcMain.handle('conversation:get-snapshot', () => getSnapshot())

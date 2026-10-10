@@ -55,6 +55,36 @@ export function Field({
   )
 }
 
+/** The folder something is saved to; clicking the path picks another */
+export function SaveDirField({
+  dir,
+  placeholder,
+  pick,
+  onChange
+}: {
+  dir: string
+  /** Shown while no folder is chosen */
+  placeholder: string
+  /** Opens main's folder dialog; null if cancelled */
+  pick: () => Promise<string | null>
+  onChange: (dir: string) => void
+}) {
+  return (
+    <Field label="保存目录" note="可点击右侧内容重新选择保存目录（选择弹窗可能被本窗口遮挡）">
+      <button
+        className="text-xs text-gray-600 max-w-48 truncate hover:text-gray-900 cursor-pointer transition-colors"
+        title="点击选择保存目录"
+        onClick={async () => {
+          const picked = await pick()
+          if (picked) onChange(picked)
+        }}
+      >
+        {dir || placeholder}
+      </button>
+    </Field>
+  )
+}
+
 /** Settings few people touch, folded away until asked for */
 export function Advanced({
   children,
